@@ -72,6 +72,72 @@ body {
 @keyframes waveIdle { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(.25)} }
 @keyframes progress { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 @keyframes dotPop   { 0%{transform:scale(1)} 50%{transform:scale(1.5)} 100%{transform:scale(1)} }
+@keyframes checkPop { 0%{transform:scale(0) rotate(-10deg)} 70%{transform:scale(1.2) rotate(3deg)} 100%{transform:scale(1) rotate(0)} }
+
+/* ── SETTINGS MODAL ── */
+.settings-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--text3); font-size: 18px; padding: 6px;
+  border-radius: var(--r-sm); transition: color .15s, background .15s;
+  display: flex; align-items: center; justify-content: center;
+}
+.settings-btn:hover { color: var(--text); background: var(--bg3); }
+
+.settings-section { margin-bottom: 20px; }
+.settings-section-title {
+  font-family: var(--font-mono);
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--text3); margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+.settings-section-title::after { content:''; flex:1; height:1px; background: var(--border); }
+
+.key-input-row { display: flex; gap: 8px; }
+.key-input-row .field { flex: 1; }
+.key-status {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; padding: 3px 10px; border-radius: var(--r-pill);
+  font-family: var(--font-mono); margin-top: 5px;
+}
+.key-status.ok    { color: var(--accent2); background: rgba(48,209,88,.1); border: 1px solid rgba(48,209,88,.2); }
+.key-status.empty { color: var(--text3);   background: var(--bg3);         border: 1px solid var(--border); }
+.key-status.error { color: var(--danger);  background: rgba(255,69,58,.1); border: 1px solid rgba(255,69,58,.2); }
+
+/* Gist sync indicator */
+.gist-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gist-sync-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-family: var(--font-mono);
+  padding: 4px 10px; border-radius: var(--r-pill);
+  border: 1px solid var(--border); color: var(--text3);
+  transition: all .3s;
+}
+.gist-sync-badge.synced  { color: var(--accent2); border-color: rgba(48,209,88,.3); background: rgba(48,209,88,.08); }
+.gist-sync-badge.syncing { color: var(--warn);    border-color: rgba(255,159,10,.3); background: rgba(255,159,10,.08); }
+.gist-sync-badge.error   { color: var(--danger);  border-color: rgba(255,69,58,.3);  background: rgba(255,69,58,.08); }
+
+/* Setup wizard (first run) */
+.setup-overlay {
+  position: fixed; inset: 0; z-index: 900;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  animation: fadeIn .3s var(--ease);
+}
+.setup-overlay.hidden { display: none; }
+.setup-card {
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: var(--r-xl); padding: 32px 28px;
+  width: 100%; max-width: 420px;
+  animation: scaleIn .4s var(--spring);
+}
+.setup-logo { font-size: 36px; margin-bottom: 16px; text-align: center; }
+.setup-title { font-size: 22px; font-weight: 700; color: var(--text); text-align: center; margin-bottom: 6px; }
+.setup-sub   { font-size: 13px; color: var(--text3); text-align: center; margin-bottom: 24px; line-height: 1.6; }
+.setup-step  { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; padding: 14px; background: var(--bg3); border-radius: var(--r-md); border: 1px solid var(--border); }
+.setup-step-num { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.setup-step-text { font-size: 13px; color: var(--text2); line-height: 1.5; }
+.setup-step-text strong { color: var(--text); }
 
 /* ═══════════════════════════════════════════
    LAYOUT SHELL
@@ -903,6 +969,7 @@ body {
     </div>
 
     <div style="display:flex;align-items:center;gap:8px">
+      <button class="settings-btn" onclick="openSettings()" title="설정">⚙️</button>
       <div class="online-pill online" id="onlinePill">
         <span id="onlineDot" class="status-dot done" style="width:5px;height:5px"></span>
         <span id="onlineText">온라인</span>
@@ -1201,820 +1268,562 @@ body {
   </div>
 </div>
 
+<!-- ── SETUP WIZARD (first run) ── -->
+<div class="setup-overlay" id="setupOverlay">
+  <div class="setup-card">
+    <div class="setup-logo">🎙️</div>
+    <div class="setup-title">AI Meeting Recorder</div>
+    <div class="setup-sub">시작하려면 API 키 2개가 필요해요.<br>모두 무료로 발급 가능합니다.</div>
+
+    <div class="setup-step">
+      <div class="setup-step-num">1</div>
+      <div class="setup-step-text">
+        <strong>Groq API 키</strong> — 음성 전사에 사용<br>
+        <a href="https://console.groq.com" target="_blank" style="color:var(--accent);font-size:12px">console.groq.com → API Keys → Create</a>
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:12px">
+      <input type="password" id="setupGroqKey" placeholder="gsk_..." autocomplete="off">
+    </div>
+
+    <div class="setup-step">
+      <div class="setup-step-num">2</div>
+      <div class="setup-step-text">
+        <strong>GitHub Token</strong> — 회의록 클라우드 저장<br>
+        <a href="https://github.com/settings/tokens/new?scopes=gist&description=AI+Meeting+Recorder" target="_blank" style="color:var(--accent);font-size:12px">github.com → Settings → Tokens → New (gist 권한만)</a>
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:20px">
+      <input type="password" id="setupGhToken" placeholder="ghp_..." autocomplete="off">
+    </div>
+
+    <button class="btn btn-primary btn-full" onclick="saveSetup()">시작하기</button>
+    <button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="skipSetup()">나중에 설정</button>
+  </div>
+</div>
+
+<!-- ── SETTINGS MODAL ── -->
+<div class="modal-overlay" id="settingsModal" onclick="if(event.target===this)closeSettings()">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-title">⚙️ 설정</div>
+    <div class="modal-sub">API 키는 이 기기에만 저장되며 서버로 전송되지 않습니다</div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">① Groq Whisper — 음성 전사</div>
+      <div class="key-input-row">
+        <div class="field">
+          <input type="password" id="settingGroqKey" placeholder="gsk_..." autocomplete="off">
+        </div>
+        <button class="btn btn-ghost" onclick="testGroqKey()">테스트</button>
+      </div>
+      <div class="key-status empty" id="groqKeyStatus">⬤ 미설정</div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">② GitHub Gist — 클라우드 저장</div>
+      <div class="key-input-row">
+        <div class="field">
+          <input type="password" id="settingGhToken" placeholder="ghp_..." autocomplete="off">
+        </div>
+        <button class="btn btn-ghost" onclick="testGhToken()">테스트</button>
+      </div>
+      <div class="key-status empty" id="ghTokenStatus">⬤ 미설정</div>
+      <div style="margin-top:10px" class="gist-row">
+        <div class="gist-sync-badge" id="gistBadge">● 미연결</div>
+        <button class="btn btn-ghost" id="gistSyncBtn" onclick="syncToGist()" style="font-size:12px;display:none">↑ 지금 동기화</button>
+        <button class="btn btn-ghost" id="gistLoadBtn" onclick="loadFromGist()" style="font-size:12px;display:none">↓ 불러오기</button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">③ 데이터 관리</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost" onclick="exportData()" style="font-size:12px">📤 JSON 내보내기</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('importFile').click()" style="font-size:12px">📥 JSON 가져오기</button>
+        <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(this.files[0])">
+        <button class="btn btn-danger" onclick="clearAllData()" style="font-size:12px">🗑 전체 삭제</button>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeSettings()">닫기</button>
+      <button class="btn btn-primary" onclick="saveSettings()">저장</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
 <script>
 // ═══════════════════════════════════════════
-//   STATE
+//   CONSTANTS & STATE
 // ═══════════════════════════════════════════
-const STORE_KEY = 'ai_meeting_recorder_v2';
-const QUEUE_KEY = 'ai_meeting_queue_v2';
+const STORE_KEY   = 'ai_meeting_recorder_v2';
+const QUEUE_KEY   = 'ai_meeting_queue_v2';
+const KEYS_KEY    = 'ai_meeting_keys_v1';
+const GIST_ID_KEY = 'ai_meeting_gist_id';
 const SPEAKER_COLORS = ['#0a84ff','#30d158','#ff9f0a','#bf5af2','#ff453a','#32ade6'];
 
-let mediaRecorder = null, audioChunks = [], recInterval = null, recSecs = 0;
-let isRecording = false, audioBlob = null, uploadedFile = null, logoDataUrl = null;
-let waveAnim = null, generatedData = null;
-let isOnline = navigator.onLine;
-let toastTimer = null;
+let mediaRecorder=null,audioChunks=[],recInterval=null,recSecs=0;
+let isRecording=false,audioBlob=null,uploadedFile=null,logoDataUrl=null;
+let waveAnim=null,generatedData=null,isOnline=navigator.onLine,toastTimer=null;
+
+// ─── Key management ───
+function getKeys(){try{return JSON.parse(localStorage.getItem(KEYS_KEY)||'{}');}catch{return {};}}
+function saveKeys(k){try{localStorage.setItem(KEYS_KEY,JSON.stringify(k));}catch{}}
+function getGroqKey(){return getKeys().groq||'';}
+function getGhToken(){return getKeys().gh||'';}
+
+// ─── Setup wizard ───
+function checkFirstRun(){const k=getKeys();if(!k.groq&&!k.setupDone){document.getElementById('setupOverlay').classList.remove('hidden');}}
+function saveSetup(){
+  const groq=document.getElementById('setupGroqKey').value.trim();
+  const gh=document.getElementById('setupGhToken').value.trim();
+  if(!groq){toast('Groq API 키를 입력해주세요');return;}
+  const k=getKeys();if(groq)k.groq=groq;if(gh)k.gh=gh;k.setupDone=true;saveKeys(k);
+  document.getElementById('setupOverlay').classList.add('hidden');
+  toast('✓ 설정 완료! 이제 녹음을 시작하세요');
+  if(gh)initGist();
+}
+function skipSetup(){const k=getKeys();k.setupDone=true;saveKeys(k);document.getElementById('setupOverlay').classList.add('hidden');toast('설정은 ⚙️ 에서 언제든 할 수 있어요');}
+
+// ─── Settings modal ───
+function openSettings(){
+  const k=getKeys();
+  const gi=document.getElementById('settingGroqKey'),ghi=document.getElementById('settingGhToken');
+  gi.value=k.groq?'••••••••'+k.groq.slice(-4):'';ghi.value=k.gh?'••••••••'+k.gh.slice(-4):'';
+  gi.dataset.masked='true';ghi.dataset.masked='true';
+  updateKeyStatuses();document.getElementById('settingsModal').classList.add('open');
+}
+function closeSettings(){document.getElementById('settingsModal').classList.remove('open');}
+function saveSettings(){
+  const k=getKeys();
+  const gv=document.getElementById('settingGroqKey').value.trim();
+  const ghv=document.getElementById('settingGhToken').value.trim();
+  if(gv&&!gv.startsWith('••'))k.groq=gv;
+  if(ghv&&!ghv.startsWith('••'))k.gh=ghv;
+  saveKeys(k);updateKeyStatuses();closeSettings();toast('✓ 설정 저장됨');
+  if(k.gh)initGist();
+}
+document.addEventListener('focus',e=>{
+  if((e.target.id==='settingGroqKey'||e.target.id==='settingGhToken')&&e.target.dataset.masked==='true'){e.target.value='';e.target.dataset.masked='false';}
+},true);
+function updateKeyStatuses(){
+  const k=getKeys();
+  const gs=document.getElementById('groqKeyStatus'),ts=document.getElementById('ghTokenStatus');
+  gs.className=k.groq?'key-status ok':'key-status empty';gs.textContent=k.groq?'✓ 설정됨':'⬤ 미설정';
+  ts.className=k.gh?'key-status ok':'key-status empty';ts.textContent=k.gh?'✓ 설정됨':'⬤ 미설정';
+  const haGh=!!k.gh;
+  document.getElementById('gistSyncBtn').style.display=haGh?'inline-flex':'none';
+  document.getElementById('gistLoadBtn').style.display=haGh?'inline-flex':'none';
+}
+async function testGroqKey(){
+  const val=document.getElementById('settingGroqKey').value.trim();
+  if(!val||val.startsWith('••')){toast('새 키를 입력해주세요');return;}
+  const st=document.getElementById('groqKeyStatus');st.className='key-status empty';st.textContent='테스트 중…';
+  try{const r=await fetch('https://api.groq.com/openai/v1/models',{headers:{Authorization:'Bearer '+val}});
+    if(r.ok){st.className='key-status ok';st.textContent='✓ 유효한 키';}
+    else{st.className='key-status error';st.textContent='✗ 유효하지 않음';}}
+  catch{st.className='key-status error';st.textContent='✗ 연결 실패';}
+}
+async function testGhToken(){
+  const val=document.getElementById('settingGhToken').value.trim();
+  if(!val||val.startsWith('••')){toast('새 토큰을 입력해주세요');return;}
+  const st=document.getElementById('ghTokenStatus');st.className='key-status empty';st.textContent='테스트 중…';
+  try{const r=await fetch('https://api.github.com/user',{headers:{Authorization:'token '+val}});
+    const d=await r.json();
+    if(r.ok){st.className='key-status ok';st.textContent='✓ '+d.login;}
+    else{st.className='key-status error';st.textContent='✗ 유효하지 않음';}}
+  catch{st.className='key-status error';st.textContent='✗ 연결 실패';}
+}
 
 // ═══════════════════════════════════════════
-//   SERVICE WORKER REGISTRATION
+//   ① GROQ WHISPER — 전사 + 화자 분리
 // ═══════════════════════════════════════════
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').then(reg => {
-    console.log('[SW] Registered', reg.scope);
-  }).catch(err => console.warn('[SW] Registration failed', err));
+async function transcribeWithSpeakers(blob){
+  const groqKey=getGroqKey();
+  if(groqKey){
+    try{
+      setProgress('Groq Whisper 음성 변환 중…',20);
+      const ext=blob.type.includes('mp4')?'mp4':blob.type.includes('ogg')?'ogg':'webm';
+      const file=new File([blob],`audio.${ext}`,{type:blob.type});
+      const fd=new FormData();
+      fd.append('file',file);fd.append('model','whisper-large-v3');
+      fd.append('language','ko');fd.append('response_format','verbose_json');
+      fd.append('timestamp_granularities[]','segment');
+      const r=await fetch('https://api.groq.com/openai/v1/audio/transcriptions',{method:'POST',headers:{Authorization:'Bearer '+groqKey},body:fd});
+      if(!r.ok)throw new Error('Groq 오류 '+r.status);
+      const data=await r.json();
+      const transcript=data.text||'';
+      const segments=data.segments||[];
+      setProgress('화자 분리 분석 중…',45);
+      const speakers=await diarizeWithClaude(transcript,segments);
+      return{transcript,speakers};
+    }catch(err){console.warn('[Groq] fallback:',err.message);}
+  }
+  setProgress('음성 분석 중…',25);
+  return await claudeTranscribeFallback(blob);
+}
 
-  // Listen for messages from SW
-  navigator.serviceWorker.addEventListener('message', e => {
-    if (e.data?.type === 'PROCESS_QUEUE') processQueue();
-  });
+async function diarizeWithClaude(transcript,segments){
+  const segText=segments.slice(0,60).map(s=>`[${s.start.toFixed(1)}s] ${s.text.trim()}`).join('\n');
+  const prompt=`회의 음성 타임스탬프 세그먼트를 분석해 화자를 구분하세요.
+발언 패턴·어투·맥락·호칭을 분석하고, 이름 언급 시 실제 이름, 없으면 "화자 A","화자 B" 형식 사용.
+
+세그먼트:
+${segText}
+
+JSON만 응답:
+{"speakers":[{"name":"이름","lines":["발언1","발언2"]}]}
+화자 1명이거나 구분 불가 시 speakers 빈 배열.`;
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,messages:[{role:'user',content:prompt}]})});
+    if(!r.ok)return[];
+    const d=await r.json();
+    const txt=d.content.map(b=>b.text||'').join('');
+    const p=JSON.parse(txt.replace(/```json|```/g,'').trim());
+    return p.speakers||[];
+  }catch{return[];}
+}
+
+async function claudeTranscribeFallback(blob){
+  const b64=await toBase64(blob),mime=blob.type||'audio/webm';
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:[
+      {type:'document',source:{type:'base64',media_type:mime,data:b64.split(',')[1]}},
+      {type:'text',text:'이 오디오를 전사하고 화자를 구분하여 JSON만 응답하세요.\n{"transcript":"전체텍스트","speakers":[{"name":"화자1","lines":["발언"]}]}\n화자 구분 어려우면 speakers 빈 배열.'}
+    ]}]})});
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||'전사 오류');}
+  const d=await r.json();const txt=d.content.map(b=>b.text||'').join('');
+  try{const p=JSON.parse(txt.replace(/```json|```/g,'').trim());return{transcript:p.transcript||txt,speakers:p.speakers||[]};}
+  catch{return{transcript:txt,speakers:[]};}
+}
+
+// ═══════════════════════════════════════════
+//   ANALYZE (Claude) — 화자 이름 적극 활용
+// ═══════════════════════════════════════════
+async function analyze(transcript,speakers,location){
+  const now=new Date();
+  const dateStr=now.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'});
+  const speakerNames=(speakers||[]).map(s=>s.name).join(', ');
+  const speakerCtx=speakers?.length?'\n화자별 주요 발언:\n'+speakers.map(s=>`${s.name}: ${(s.lines||[]).slice(0,2).join(' / ')}`).join('\n'):'';
+  const prompt=`회의 전사 내용을 분석하여 JSON으로만 응답하세요.
+
+현재 일시: ${dateStr}
+현재 장소: ${location||'미기재'}
+감지된 화자: ${speakerNames||'미감지'}${speakerCtx}
+
+전사:
+${transcript}
+
+{"title":"회의 제목","date":"일시","location":"장소","attendees":"참석자(화자 이름 활용)","issues":[{"title":"쟁점","content":"내용"}],"decisions":["결정사항"],"actions":[{"task":"할일","owner":"담당자(화자이름활용)","due":"기한"}],"summary":"요약 3~5문장","suggestions":[{"tag":"효율화","content":"제안"},{"tag":"후속조치","content":"제안"},{"tag":"리스크","content":"주의사항"},{"tag":"다음회의","content":"추천안건"}]}`;
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
+  if(!r.ok)throw new Error('분석 오류 '+r.status);
+  const d=await r.json();const txt=d.content.map(b=>b.text||'').join('');
+  return JSON.parse(txt.replace(/```json|```/g,'').trim());
+}
+
+// ═══════════════════════════════════════════
+//   ③ GITHUB GIST — 클라우드 저장/불러오기
+// ═══════════════════════════════════════════
+const GIST_FILENAME='ai-meeting-recorder-data.json';
+function setGistBadge(state,text){
+  const b=document.getElementById('gistBadge');
+  b.className='gist-sync-badge '+state;
+  b.textContent={synced:'✓ ',syncing:'↑ ',error:'✗ ','':''}[state]+text;
+}
+async function initGist(){
+  const token=getGhToken();if(!token)return;
+  setGistBadge('syncing','연결 확인 중…');
+  try{
+    const gistId=localStorage.getItem(GIST_ID_KEY);
+    if(gistId){const r=await fetch(`https://api.github.com/gists/${gistId}`,{headers:{Authorization:'token '+token}});if(r.ok){setGistBadge('synced','연결됨');updateKeyStatuses();return;}}
+    const listR=await fetch('https://api.github.com/gists?per_page=100',{headers:{Authorization:'token '+token}});
+    const list=await listR.json();
+    const found=list.find(g=>g.files&&g.files[GIST_FILENAME]);
+    if(found){localStorage.setItem(GIST_ID_KEY,found.id);setGistBadge('synced','기존 Gist 연결됨');}
+    else{
+      const cr=await fetch('https://api.github.com/gists',{method:'POST',headers:{Authorization:'token '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({description:'🎙️ AI Meeting Recorder',public:false,files:{[GIST_FILENAME]:{content:JSON.stringify({history:[],version:1,created:new Date().toISOString()})}}})});
+      const cd=await cr.json();localStorage.setItem(GIST_ID_KEY,cd.id);setGistBadge('synced','Gist 생성 완료');
+    }
+    updateKeyStatuses();
+  }catch{setGistBadge('error','연결 실패');}
+}
+async function syncToGist(){
+  const token=getGhToken();if(!token){toast('GitHub 토큰을 먼저 설정해주세요');return;}
+  const gistId=localStorage.getItem(GIST_ID_KEY);if(!gistId){await initGist();return;}
+  setGistBadge('syncing','동기화 중…');
+  try{
+    const payload={history:getHistory(),syncedAt:new Date().toISOString(),version:2};
+    const r=await fetch(`https://api.github.com/gists/${gistId}`,{method:'PATCH',
+      headers:{Authorization:'token '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({files:{[GIST_FILENAME]:{content:JSON.stringify(payload,null,2)}}})});
+    if(!r.ok)throw new Error(r.status);
+    setGistBadge('synced',`동기화 완료 (${new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})})`);
+    toast('✓ Gist 동기화 완료');
+  }catch(e){setGistBadge('error','동기화 실패');toast('Gist 동기화 실패: '+e.message);}
+}
+async function loadFromGist(){
+  const token=getGhToken();if(!token){toast('GitHub 토큰을 먼저 설정해주세요');return;}
+  const gistId=localStorage.getItem(GIST_ID_KEY);if(!gistId){toast('먼저 Gist를 연결해주세요');return;}
+  setGistBadge('syncing','불러오는 중…');
+  try{
+    const r=await fetch(`https://api.github.com/gists/${gistId}`,{headers:{Authorization:'token '+token}});
+    const d=await r.json();const raw=d.files?.[GIST_FILENAME]?.content;if(!raw)throw new Error('파일 없음');
+    const data=JSON.parse(raw);const remote=data.history||[];const local=getHistory();
+    const merged=[...remote,...local].reduce((acc,item)=>{if(!acc.find(x=>x.id===item.id))acc.push(item);return acc;},[]).sort((a,b)=>b.id-a.id).slice(0,60);
+    try{localStorage.setItem(STORE_KEY,JSON.stringify(merged));}catch{}
+    setGistBadge('synced',`${remote.length}건 불러옴`);toast(`✓ Gist에서 ${remote.length}건 불러옴`);
+    if(document.getElementById('view-history').style.display!=='none')renderHistory();
+  }catch(e){setGistBadge('error','불러오기 실패');toast('불러오기 실패: '+e.message);}
+}
+async function saveAndSync(d){
+  saveHistory(d);
+  if(getGhToken()&&localStorage.getItem(GIST_ID_KEY))setTimeout(syncToGist,1200);
+}
+
+// ─── Data export/import ───
+function exportData(){
+  const data={history:getHistory(),exportedAt:new Date().toISOString(),version:2};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=`meeting-backup-${new Date().toLocaleDateString('ko-KR').replace(/[. ]/g,'-')}.json`;a.click();URL.revokeObjectURL(url);toast('✓ JSON 내보내기 완료');
+}
+function importData(file){
+  if(!file)return;const r=new FileReader();
+  r.onload=ev=>{try{const data=JSON.parse(ev.target.result);const imported=data.history||[];const local=getHistory();
+    const merged=[...imported,...local].reduce((acc,item)=>{if(!acc.find(x=>x.id===item.id))acc.push(item);return acc;},[]).sort((a,b)=>b.id-a.id).slice(0,60);
+    localStorage.setItem(STORE_KEY,JSON.stringify(merged));toast(`✓ ${imported.length}건 가져오기 완료`);renderHistory();}
+  catch{toast('올바른 JSON 파일이 아닙니다');}};r.readAsText(file);
+}
+function clearAllData(){if(!confirm('모든 회의록을 삭제할까요?'))return;localStorage.removeItem(STORE_KEY);localStorage.removeItem(QUEUE_KEY);renderHistory();toast('전체 삭제 완료');}
+
+// ═══════════════════════════════════════════
+//   SERVICE WORKER
+// ═══════════════════════════════════════════
+if('serviceWorker'in navigator){
+  navigator.serviceWorker.register('/sw.js').catch(err=>console.warn('[SW]',err));
+  navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='PROCESS_QUEUE')processQueue();});
 }
 
 // ═══════════════════════════════════════════
 //   ONLINE / OFFLINE
 // ═══════════════════════════════════════════
-function updateOnlineStatus() {
-  isOnline = navigator.onLine;
-  const pill = document.getElementById('onlinePill');
-  const dot  = document.getElementById('onlineDot');
-  const txt  = document.getElementById('onlineText');
-  const q    = getQueue();
-
-  if (isOnline) {
-    pill.className = 'online-pill online';
-    dot.className  = 'status-dot done';
-    txt.textContent = '온라인';
-    // Notify SW
-    navigator.serviceWorker?.controller?.postMessage({ type: 'ONLINE_STATUS_CHANGE', online: true });
-    // Auto-process queue
-    if (q.length > 0) {
-      setTimeout(processQueue, 1500);
-      toast(`📶 온라인 복귀 — 대기 녹음 ${q.length}건 처리 시작`);
-    }
-  } else {
-    const qlen = q.length;
-    pill.className = qlen > 0 ? 'online-pill offline queued' : 'online-pill offline';
-    dot.className  = 'status-dot queued';
-    txt.textContent = qlen > 0 ? `오프라인 (${qlen}건 대기)` : '오프라인';
-    toast('📴 오프라인 — 녹음은 계속 가능합니다');
-  }
+function updateOnlineStatus(){
+  isOnline=navigator.onLine;
+  const pill=document.getElementById('onlinePill'),dot=document.getElementById('onlineDot'),txt=document.getElementById('onlineText'),q=getQueue();
+  if(isOnline){pill.className='online-pill online';dot.className='status-dot done';txt.textContent='온라인';navigator.serviceWorker?.controller?.postMessage({type:'ONLINE_STATUS_CHANGE',online:true});if(q.length>0){setTimeout(processQueue,1500);toast(`📶 온라인 복귀 — 대기 ${q.length}건 처리 시작`);}}
+  else{const qlen=q.length;pill.className=qlen>0?'online-pill offline queued':'online-pill offline';dot.className='status-dot queued';txt.textContent=qlen>0?`오프라인 (${qlen}건 대기)`:'오프라인';toast('📴 오프라인 — 녹음은 계속 가능합니다');}
   renderQueueBadge();
 }
-
-window.addEventListener('online',  updateOnlineStatus);
-window.addEventListener('offline', updateOnlineStatus);
+window.addEventListener('online',updateOnlineStatus);window.addEventListener('offline',updateOnlineStatus);
 
 // ═══════════════════════════════════════════
 //   OFFLINE QUEUE
 // ═══════════════════════════════════════════
-function getQueue() {
-  try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch { return []; }
-}
-function saveQueue(q) {
-  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch {}
-}
-function addToQueue(blobDataUrl, meta) {
-  const q = getQueue();
-  q.push({ id: Date.now(), blobDataUrl, meta, queued: new Date().toISOString() });
-  saveQueue(q);
-  renderQueueBadge();
-}
-function removeFromQueue(id) {
-  const q = getQueue().filter(i => i.id !== id);
-  saveQueue(q);
-  renderQueueBadge();
-}
-function renderQueueBadge() {
-  const q = getQueue();
-  const sec = document.getElementById('queueSection');
-  const cnt = document.getElementById('queueCount');
-  sec.style.display = q.length > 0 ? 'block' : 'none';
-  if (cnt) cnt.textContent = q.length;
-}
-
-async function processQueue() {
-  if (!isOnline) return;
-  const q = getQueue();
-  if (q.length === 0) return;
-
-  setStatus('live', `대기 ${q.length}건 처리 중`);
-  let done = 0;
-
-  for (const item of q) {
-    try {
-      toast(`처리 중 (${done + 1}/${q.length})…`);
-      // Rebuild blob from data URL
-      const res = await fetch(item.blobDataUrl);
-      const blob = await res.blob();
-
-      const { transcript, speakers } = await transcribeWithSpeakers(blob);
-      const parsed = await analyze(transcript, speakers, item.meta?.location || '');
-
-      // Auto-fill fields from first item
-      if (done === 0) {
-        if (parsed.title)     document.getElementById('meetingTitle').value     = parsed.title;
-        if (parsed.date)      document.getElementById('meetingDate').value      = parsed.date;
-        if (parsed.attendees) document.getElementById('meetingAttendees').value = parsed.attendees;
-        if (parsed.location)  document.getElementById('locationInput').value   = parsed.location;
-        generatedData = { ...parsed, transcript, speakers };
-        renderDoc(parsed, speakers);
-        saveHistory(parsed);
-        switchTab('result');
-      }
-      removeFromQueue(item.id);
-      done++;
-    } catch (err) {
-      console.error('[Queue] Failed to process item', item.id, err);
-      break; // Stop if API call fails (maybe still offline)
-    }
+function getQueue(){try{return JSON.parse(localStorage.getItem(QUEUE_KEY)||'[]');}catch{return[];}}
+function saveQueue(q){try{localStorage.setItem(QUEUE_KEY,JSON.stringify(q));}catch{}}
+function addToQueue(blobDataUrl,meta){const q=getQueue();q.push({id:Date.now(),blobDataUrl,meta,queued:new Date().toISOString()});saveQueue(q);renderQueueBadge();}
+function removeFromQueue(id){saveQueue(getQueue().filter(i=>i.id!==id));renderQueueBadge();}
+function renderQueueBadge(){const q=getQueue(),sec=document.getElementById('queueSection'),cnt=document.getElementById('queueCount');sec.style.display=q.length>0?'block':'none';if(cnt)cnt.textContent=q.length;}
+async function processQueue(){
+  if(!isOnline)return;const q=getQueue();if(!q.length)return;
+  setStatus('live',`대기 ${q.length}건 처리 중`);let done=0;
+  for(const item of q){
+    try{toast(`처리 중 (${done+1}/${q.length})…`);const res=await fetch(item.blobDataUrl);const blob=await res.blob();
+      const{transcript,speakers}=await transcribeWithSpeakers(blob);const parsed=await analyze(transcript,speakers,item.meta?.location||'');
+      if(done===0){if(parsed.title)document.getElementById('meetingTitle').value=parsed.title;if(parsed.date)document.getElementById('meetingDate').value=parsed.date;if(parsed.attendees)document.getElementById('meetingAttendees').value=parsed.attendees;if(parsed.location)document.getElementById('locationInput').value=parsed.location;generatedData={...parsed,transcript,speakers};renderDoc(parsed,speakers);await saveAndSync(parsed);switchTab('result');}
+      removeFromQueue(item.id);done++;}
+    catch(err){console.error('[Queue]',err);break;}
   }
-
-  if (done > 0) {
-    toast(`✓ 오프라인 대기 ${done}건 처리 완료`);
-    setStatus('done', '완료');
-  }
-  renderQueueBadge();
-  updateOnlineStatus();
+  if(done>0){toast(`✓ 대기 ${done}건 처리 완료`);setStatus('done','완료');}
+  renderQueueBadge();updateOnlineStatus();
 }
 
 // ═══════════════════════════════════════════
 //   NAV / TABS
 // ═══════════════════════════════════════════
-const VIEWS = ['record', 'result', 'history'];
-
-function switchTab(name, tabEl) {
-  // Mobile tab bar
-  document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
-  if (tabEl) tabEl.classList.add('active');
-  else {
-    // Find tab by index
-    const idx = VIEWS.indexOf(name);
-    document.querySelectorAll('.tab-item')[idx]?.classList.add('active');
-  }
-
-  VIEWS.forEach(v => {
-    const el = document.getElementById(`view-${v}`);
-    if (el) el.classList.toggle('active', v === name);
-  });
-
-  if (name === 'history') renderHistory();
+const VIEWS=['record','result','history'];
+function switchTab(name,tabEl){
+  document.querySelectorAll('.tab-item').forEach(t=>t.classList.remove('active'));
+  if(tabEl)tabEl.classList.add('active');else document.querySelectorAll('.tab-item')[VIEWS.indexOf(name)]?.classList.add('active');
+  VIEWS.forEach(v=>{const el=document.getElementById(`view-${v}`);if(el)el.classList.toggle('active',v===name);});
+  if(name==='history')renderHistory();
 }
-
-function desktopTab(name, el) {
-  document.querySelectorAll('.desktop-tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-
-  const result  = document.getElementById('view-result');
-  const history = document.getElementById('view-history');
-
-  if (name === 'result') {
-    result.style.display  = '';
-    history.style.display = 'none';
-  } else {
-    result.style.display  = 'none';
-    history.style.display = 'flex';
-    renderHistory();
-  }
+function desktopTab(name,el){
+  document.querySelectorAll('.desktop-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');
+  document.getElementById('view-result').style.display=name==='result'?'':'none';
+  document.getElementById('view-history').style.display=name==='history'?'flex':'none';
+  if(name==='history')renderHistory();
 }
 
 // ═══════════════════════════════════════════
 //   LOCATION
 // ═══════════════════════════════════════════
-async function getLocation() {
-  const btn = document.getElementById('locBtn');
-  btn.disabled = true; btn.textContent = '확인 중…';
-  if (!navigator.geolocation) { toast('위치 서비스 미지원'); btn.disabled = false; btn.textContent = '📍 현재위치'; return; }
-  navigator.geolocation.getCurrentPosition(async pos => {
-    const { latitude: lat, longitude: lng } = pos.coords;
-    try {
-      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ko`);
-      const d = await r.json(); const a = d.address;
-      let loc = '';
-      if (a.building) loc += a.building + ' ';
-      if (a.road)     loc += a.road + ' ';
-      if (a.suburb)   loc += a.suburb + ' ';
-      if (a.city || a.town) loc += (a.city || a.town);
-      document.getElementById('locationInput').value = loc.trim() || d.display_name;
-      toast('📍 위치 자동 입력 완료');
-    } catch { document.getElementById('locationInput').value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`; }
-    btn.disabled = false; btn.textContent = '📍 현재위치';
-  }, () => { toast('위치 권한 필요'); btn.disabled = false; btn.textContent = '📍 현재위치'; }, { timeout: 8000 });
+async function getLocation(){
+  const btn=document.getElementById('locBtn');btn.disabled=true;btn.textContent='확인 중…';
+  if(!navigator.geolocation){toast('위치 서비스 미지원');btn.disabled=false;btn.textContent='📍 현재위치';return;}
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const{latitude:lat,longitude:lng}=pos.coords;
+    try{const r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ko`);const d=await r.json();const a=d.address;
+      let loc='';if(a.building)loc+=a.building+' ';if(a.road)loc+=a.road+' ';if(a.suburb)loc+=a.suburb+' ';if(a.city||a.town)loc+=(a.city||a.town);
+      document.getElementById('locationInput').value=loc.trim()||d.display_name;toast('📍 위치 자동 입력 완료');}
+    catch{document.getElementById('locationInput').value=`${lat.toFixed(4)}, ${lng.toFixed(4)}`;}
+    btn.disabled=false;btn.textContent='📍 현재위치';
+  },()=>{toast('위치 권한 필요');btn.disabled=false;btn.textContent='📍 현재위치';},{timeout:8000});
 }
 
 // ═══════════════════════════════════════════
-//   LOGO
+//   LOGO / FILE / RECORD
 // ═══════════════════════════════════════════
-function handleLogo(f) {
-  if (!f) return;
-  const r = new FileReader();
-  r.onload = ev => {
-    logoDataUrl = ev.target.result;
-    document.getElementById('logoThumb').innerHTML = `<img src="${logoDataUrl}" alt="logo">`;
-    document.getElementById('docLogo').src = logoDataUrl;
-    document.getElementById('docLogo').style.display = 'block';
-    toast('✓ 로고 업로드 완료');
-  };
-  r.readAsDataURL(f);
+function handleLogo(f){if(!f)return;const r=new FileReader();r.onload=ev=>{logoDataUrl=ev.target.result;document.getElementById('logoThumb').innerHTML=`<img src="${logoDataUrl}" alt="logo">`;document.getElementById('docLogo').src=logoDataUrl;document.getElementById('docLogo').style.display='block';toast('✓ 로고 업로드 완료');};r.readAsDataURL(f);}
+function handleFile(f){if(!f)return;uploadedFile=f;audioBlob=null;document.getElementById('fileBadge').style.display='flex';document.getElementById('fileName').textContent=f.name;document.getElementById('uploadZone').style.display='none';setStatus('done','파일 준비');toast('✓ 파일 로드 완료');}
+function removeFile(s){uploadedFile=null;document.getElementById('fileBadge').style.display='none';document.getElementById('uploadZone').style.display='block';document.getElementById('audioFile').value='';if(!s)setStatus('','대기 중');}
+function handleDrop(e){e.preventDefault();document.getElementById('uploadZone').classList.remove('drag');const f=e.dataTransfer.files[0];if(f)handleFile(f);}
+
+async function toggleRecord(){
+  if(isRecording){stopRecord();return;}
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:{sampleRate:16000,channelCount:1}});
+    const mime=['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'].find(t=>MediaRecorder.isTypeSupported(t))||'audio/webm';
+    mediaRecorder=new MediaRecorder(stream,{mimeType:mime});audioChunks=[];
+    mediaRecorder.ondataavailable=e=>{if(e.data.size>0)audioChunks.push(e.data);};
+    mediaRecorder.onstop=()=>{audioBlob=new Blob(audioChunks,{type:mime});uploadedFile=null;removeFile(true);setStatus('done','녹음 완료');toast(`✓ 녹음 완료 (${fmt(recSecs)})`);};
+    mediaRecorder.start(200);isRecording=true;recSecs=0;
+    const circ=2*Math.PI*65;
+    recInterval=setInterval(()=>{recSecs++;document.getElementById('recTime').textContent=fmt(recSecs);document.getElementById('recRingFill').style.strokeDashoffset=circ*(1-Math.min(recSecs/3600,1));},1000);
+    waveAnim=setInterval(()=>{document.querySelectorAll('.wbar').forEach(b=>{b.style.height=(4+Math.random()*22)+'px';b.style.transition='height 0.08s ease';});},90);
+    document.getElementById('recBtn').classList.add('active');document.getElementById('recBtn').textContent='⏹';
+    document.getElementById('recTime').classList.add('live');document.getElementById('waveform').classList.add('live');
+    document.getElementById('recLabel').textContent='탭하여 중지';setStatus('live','녹음 중');
+  }catch{toast('마이크 권한이 필요합니다');}
 }
-
-// ═══════════════════════════════════════════
-//   RECORDING
-// ═══════════════════════════════════════════
-async function toggleRecord() {
-  if (isRecording) { stopRecord(); return; }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1 } });
-    const mime = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'].find(t => MediaRecorder.isTypeSupported(t)) || 'audio/webm';
-    mediaRecorder = new MediaRecorder(stream, { mimeType: mime });
-    audioChunks = [];
-    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
-    mediaRecorder.onstop = () => {
-      audioBlob = new Blob(audioChunks, { type: mime });
-      uploadedFile = null; removeFile(true);
-      setStatus('done', '녹음 완료'); toast(`✓ 녹음 완료 (${fmt(recSecs)})`);
-    };
-    mediaRecorder.start(200);
-    isRecording = true; recSecs = 0;
-
-    // Ring animation
-    const circumference = 2 * Math.PI * 65;
-    recInterval = setInterval(() => {
-      recSecs++;
-      document.getElementById('recTime').textContent = fmt(recSecs);
-      // Ring fills up to max 60 min
-      const pct = Math.min(recSecs / 3600, 1);
-      document.getElementById('recRingFill').style.strokeDashoffset = circumference * (1 - pct);
-    }, 1000);
-
-    waveAnim = setInterval(() => {
-      document.querySelectorAll('.wbar').forEach(b => {
-        b.style.height = (4 + Math.random() * 22) + 'px';
-        b.style.transition = 'height 0.08s ease';
-      });
-    }, 90);
-
-    document.getElementById('recBtn').classList.add('active');
-    document.getElementById('recBtn').textContent = '⏹';
-    document.getElementById('recTime').classList.add('live');
-    document.getElementById('waveform').classList.add('live');
-    document.getElementById('recLabel').textContent = '탭하여 중지';
-    setStatus('live', '녹음 중');
-  } catch (e) { toast('마이크 권한이 필요합니다'); }
+function stopRecord(){
+  if(!isRecording)return;mediaRecorder.stop();mediaRecorder.stream.getTracks().forEach(t=>t.stop());
+  isRecording=false;clearInterval(recInterval);clearInterval(waveAnim);
+  const bars=[8,14,10,18,12,20,10,16,8,14,18,10];document.querySelectorAll('.wbar').forEach((b,i)=>{b.style.height=bars[i]+'px';b.style.transition='height .3s ease';});
+  document.getElementById('recBtn').classList.remove('active');document.getElementById('recBtn').textContent='🎙️';
+  document.getElementById('recTime').classList.remove('live');document.getElementById('waveform').classList.remove('live');
+  document.getElementById('recRingFill').style.strokeDashoffset=408;document.getElementById('recLabel').textContent='탭하여 녹음 시작';
 }
-
-function stopRecord() {
-  if (!isRecording) return;
-  mediaRecorder.stop(); mediaRecorder.stream.getTracks().forEach(t => t.stop());
-  isRecording = false; clearInterval(recInterval); clearInterval(waveAnim);
-  // Reset wave
-  const bars = document.querySelectorAll('.wbar');
-  [8,14,10,18,12,20,10,16,8,14,18,10].forEach((h,i) => { if (bars[i]) { bars[i].style.height = h+'px'; bars[i].style.transition = 'height .3s ease'; } });
-  document.getElementById('recBtn').classList.remove('active');
-  document.getElementById('recBtn').textContent = '🎙️';
-  document.getElementById('recTime').classList.remove('live');
-  document.getElementById('waveform').classList.remove('live');
-  document.getElementById('recRingFill').style.strokeDashoffset = 408;
-  document.getElementById('recLabel').textContent = '탭하여 녹음 시작';
-}
-
-function fmt(s) { return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0'); }
-
-// ═══════════════════════════════════════════
-//   FILE HANDLING
-// ═══════════════════════════════════════════
-function handleFile(f) {
-  if (!f) return;
-  uploadedFile = f; audioBlob = null;
-  document.getElementById('fileBadge').style.display = 'flex';
-  document.getElementById('fileName').textContent = f.name;
-  document.getElementById('uploadZone').style.display = 'none';
-  setStatus('done', '파일 준비'); toast('✓ 파일 로드 완료');
-}
-function removeFile(silent) {
-  uploadedFile = null;
-  document.getElementById('fileBadge').style.display = 'none';
-  document.getElementById('uploadZone').style.display = 'block';
-  document.getElementById('audioFile').value = '';
-  if (!silent) setStatus('', '대기 중');
-}
-function handleDrop(e) {
-  e.preventDefault(); document.getElementById('uploadZone').classList.remove('drag');
-  const f = e.dataTransfer.files[0]; if (f) handleFile(f);
-}
+function fmt(s){return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 
 // ═══════════════════════════════════════════
 //   GENERATE
 // ═══════════════════════════════════════════
-async function generate() {
-  const src = audioBlob || uploadedFile;
-  if (!src) { toast('녹음하거나 파일을 업로드해주세요'); return; }
-  const location = document.getElementById('locationInput').value.trim();
-
-  // OFFLINE: queue it
-  if (!isOnline) {
-    const r = new FileReader();
-    r.onload = ev => {
-      addToQueue(ev.target.result, { location });
-      toast('📴 오프라인 — 온라인 복귀 시 자동 처리됩니다');
-      setStatus('queued', '대기 중');
-      renderQueueBadge();
-      updateOnlineStatus();
-    };
-    r.readAsDataURL(src);
-    return;
-  }
-
-  setLoading(true); setStatus('', 'AI 처리 중…');
-  try {
-    setProgress('화자 분리 및 음성 변환 중…', 15);
-    const { transcript, speakers } = await transcribeWithSpeakers(src);
-
-    const prev = document.getElementById('transcriptPreview');
-    prev.textContent = (transcript || '').slice(0, 300) + (transcript?.length > 300 ? '…' : '');
-    prev.style.display = 'block';
-
-    setProgress('AI 분석 및 회의록 작성 중…', 60);
-    const parsed = await analyze(transcript, speakers, location);
-
-    generatedData = { ...parsed, transcript, speakers };
-    setProgress('완료!', 100);
-
-    // Auto-fill fields
-    if (parsed.title)     document.getElementById('meetingTitle').value     = parsed.title;
-    if (parsed.date)      document.getElementById('meetingDate').value      = parsed.date;
-    if (parsed.attendees) document.getElementById('meetingAttendees').value = parsed.attendees;
-    if (parsed.location && !location) document.getElementById('locationInput').value = parsed.location;
-
-    renderDoc(parsed, speakers);
-    saveHistory(parsed);
-
-    // Switch to result view
-    switchTab('result');
-    document.querySelectorAll('.tab-item')[1]?.classList.add('active');
-    document.querySelectorAll('.tab-item')[0]?.classList.remove('active');
-
-    // Show desktop action buttons
-    showDesktopActions(true);
-
-    setTimeout(() => { setLoading(false); setStatus('done', '완료'); }, 500);
-    toast('✓ 회의록 생성 완료');
-  } catch (e) {
-    console.error(e); toast('오류: ' + e.message);
-    setLoading(false); setStatus('', '대기 중');
-  }
+async function generate(){
+  const src=audioBlob||uploadedFile;if(!src){toast('녹음하거나 파일을 업로드해주세요');return;}
+  if(!getGroqKey()){toast('⚙️ 설정에서 Groq API 키를 먼저 입력해주세요');openSettings();return;}
+  const location=document.getElementById('locationInput').value.trim();
+  if(!isOnline){const r=new FileReader();r.onload=ev=>{addToQueue(ev.target.result,{location});toast('📴 오프라인 — 온라인 복귀 시 자동 처리');setStatus('queued','대기 중');renderQueueBadge();updateOnlineStatus();};r.readAsDataURL(src);return;}
+  setLoading(true);setStatus('','AI 처리 중…');
+  try{
+    const{transcript,speakers}=await transcribeWithSpeakers(src);
+    const prev=document.getElementById('transcriptPreview');prev.textContent=(transcript||'').slice(0,300)+((transcript?.length||0)>300?'…':'');prev.style.display='block';
+    setProgress('회의록 분석 및 작성 중…',70);
+    const parsed=await analyze(transcript,speakers,location);
+    generatedData={...parsed,transcript,speakers};setProgress('완료!',100);
+    if(parsed.title)document.getElementById('meetingTitle').value=parsed.title;
+    if(parsed.date)document.getElementById('meetingDate').value=parsed.date;
+    if(parsed.attendees)document.getElementById('meetingAttendees').value=parsed.attendees;
+    if(parsed.location&&!location)document.getElementById('locationInput').value=parsed.location;
+    renderDoc(parsed,speakers);await saveAndSync(parsed);
+    switchTab('result');document.querySelectorAll('.tab-item').forEach((t,i)=>t.classList.toggle('active',i===1));
+    showDesktopActions(true);setTimeout(()=>{setLoading(false);setStatus('done','완료');},500);toast('✓ 회의록 생성 완료');
+  }catch(e){console.error(e);toast('오류: '+e.message);setLoading(false);setStatus('','대기 중');}
 }
-
-// ═══════════════════════════════════════════
-//   API: TRANSCRIBE WITH SPEAKERS
-// ═══════════════════════════════════════════
-async function transcribeWithSpeakers(blob) {
-  const b64 = await toBase64(blob);
-  const mime = blob.type || 'audio/webm';
-  const prompt = `이 오디오를 분석하여 화자 분리와 전사를 수행하고 JSON만 응답하세요.
-
-{
-  "transcript": "전체 대화 텍스트",
-  "speakers": [
-    {"name": "화자 1", "lines": ["발언1", "발언2"]},
-    {"name": "화자 2", "lines": ["발언1"]}
-  ]
-}
-
-화자 구분이 어려우면 speakers는 빈 배열로 반환. JSON만 출력.`;
-
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514', max_tokens: 1000,
-      messages: [{ role: 'user', content: [
-        { type: 'document', source: { type: 'base64', media_type: mime, data: b64.split(',')[1] } },
-        { type: 'text', text: prompt }
-      ]}]
-    })
-  });
-  if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e.error?.message || '전사 오류 ' + resp.status); }
-  const d = await resp.json();
-  const txt = d.content.map(b => b.text || '').join('');
-  try {
-    const p = JSON.parse(txt.replace(/```json|```/g, '').trim());
-    return { transcript: p.transcript || txt, speakers: p.speakers || [] };
-  } catch { return { transcript: txt, speakers: [] }; }
-}
-
-// ═══════════════════════════════════════════
-//   API: ANALYZE
-// ═══════════════════════════════════════════
-async function analyze(transcript, speakers, location) {
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric', weekday:'short', hour:'2-digit', minute:'2-digit' });
-  const speakerNames = (speakers || []).map(s => s.name).join(', ');
-
-  const prompt = `회의 전사 내용을 분석하여 JSON으로만 응답하세요.
-
-현재 일시: ${dateStr}
-현재 장소: ${location || '미기재'}
-감지된 화자: ${speakerNames || '미감지'}
-
-전사:
-${transcript}
-
-{
-  "title": "회의 제목",
-  "date": "일시",
-  "location": "장소",
-  "attendees": "참석자",
-  "issues": [{"title":"쟁점","content":"내용"}],
-  "decisions": ["결정사항"],
-  "actions": [{"task":"할일","owner":"담당자","due":"기한"}],
-  "summary": "요약 3~5문장",
-  "suggestions": [
-    {"tag":"효율화","content":"제안"},
-    {"tag":"후속조치","content":"제안"},
-    {"tag":"리스크","content":"주의사항"},
-    {"tag":"다음회의","content":"추천안건"}
-  ]
-}`;
-
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] })
-  });
-  if (!resp.ok) throw new Error('분석 오류 ' + resp.status);
-  const d = await resp.json();
-  const txt = d.content.map(b => b.text || '').join('');
-  return JSON.parse(txt.replace(/```json|```/g, '').trim());
-}
-
-function toBase64(blob) {
-  return new Promise((res, rej) => {
-    const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error('읽기 실패'));
-    r.readAsDataURL(blob);
-  });
-}
+function toBase64(blob){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(new Error('읽기 실패'));r.readAsDataURL(blob);});}
 
 // ═══════════════════════════════════════════
 //   RENDER DOC
 // ═══════════════════════════════════════════
-function renderDoc(d, speakers) {
-  const now = new Date();
-  document.getElementById('docTitle').textContent    = d.title || '회의록';
-  document.getElementById('docDate').textContent     = d.date || '—';
-  document.getElementById('docLocation').textContent = d.location || document.getElementById('locationInput').value || '—';
-  document.getElementById('docAttendees').textContent= d.attendees || '—';
-  document.getElementById('docCreated').textContent  = now.toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric' });
-  document.getElementById('docFooterDate').textContent = now.toLocaleDateString('ko-KR');
-
-  // Speakers
-  const sl = document.getElementById('speakerList');
-  const ss = document.getElementById('speakerSection');
-  sl.innerHTML = '';
-  if (speakers && speakers.length > 0) {
-    ss.style.display = 'block';
-    speakers.forEach((sp, i) => {
-      const color = SPEAKER_COLORS[i % SPEAKER_COLORS.length];
-      (sp.lines || []).slice(0, 2).forEach((line, li) => {
-        const div = document.createElement('div');
-        div.className = 'speaker-turn';
-        div.style.animationDelay = (li * .06) + 's';
-        div.innerHTML = `
-          <div class="speaker-avatar" style="background:${color}">${sp.name.slice(-1)}</div>
-          <div style="flex:1">
-            ${li === 0 ? `<div class="speaker-name" style="color:${color}">${esc(sp.name)}</div>` : ''}
-            <div class="speaker-quote">${esc(line)}</div>
-          </div>`;
-        sl.appendChild(div);
-      });
-    });
-  } else { ss.style.display = 'none'; }
-
-  // Issues
-  const il = document.getElementById('issuesList'); il.innerHTML = '';
-  (d.issues || []).forEach((iss, i) => {
-    const el = document.createElement('div'); el.className = 'issue-card'; el.style.animationDelay = (i*.05)+'s';
-    el.innerHTML = `<div class="issue-title">${esc(iss.title)}</div><div class="issue-body">${esc(iss.content)}</div>`;
-    il.appendChild(el);
-  });
-
-  // Decisions
-  const dl = document.getElementById('decisionsList'); dl.innerHTML = '';
-  (d.decisions || []).forEach((dec, i) => {
-    const li = document.createElement('li'); li.className = 'decision-item'; li.style.animationDelay = (i*.04)+'s';
-    li.innerHTML = `<div class="dec-dot"></div><span>${esc(dec)}</span>`;
-    dl.appendChild(li);
-  });
-
-  // Actions
-  const al = document.getElementById('actionsList'); al.innerHTML = '';
-  (d.actions || []).forEach((a, i) => {
-    const el = document.createElement('div'); el.className = 'action-card'; el.style.animationDelay = (i*.05)+'s';
-    el.innerHTML = `<div class="action-task">${esc(a.task)}</div><div class="action-meta">담당: ${esc(a.owner)} · 기한: ${esc(a.due)}</div>`;
-    al.appendChild(el);
-  });
-
-  // Summary
-  document.getElementById('summaryContent').textContent = d.summary || '';
-
-  // Suggestions
-  const sg = document.getElementById('suggestGrid'); sg.innerHTML = '';
-  if (d.suggestions && d.suggestions.length) {
-    d.suggestions.forEach((s, i) => {
-      const el = document.createElement('div'); el.className = 'suggest-card'; el.style.animationDelay = (i*.07)+'s';
-      el.innerHTML = `<div class="suggest-tag">${esc(s.tag)}</div><div class="suggest-body">${esc(s.content)}</div>`;
-      sg.appendChild(el);
-    });
-    document.getElementById('suggestSection').style.display = 'block';
-  }
-
-  document.getElementById('emptyState').style.display   = 'none';
-  document.getElementById('minutesContent').style.display = 'block';
-  if (navigator.share) document.getElementById('nativeShareBtn').style.display = 'flex';
+function renderDoc(d,speakers){
+  const now=new Date();
+  document.getElementById('docTitle').textContent=d.title||'회의록';document.getElementById('docDate').textContent=d.date||'—';
+  document.getElementById('docLocation').textContent=d.location||document.getElementById('locationInput').value||'—';
+  document.getElementById('docAttendees').textContent=d.attendees||'—';
+  document.getElementById('docCreated').textContent=now.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'});
+  document.getElementById('docFooterDate').textContent=now.toLocaleDateString('ko-KR');
+  const sl=document.getElementById('speakerList'),ss=document.getElementById('speakerSection');sl.innerHTML='';
+  if(speakers?.length){ss.style.display='block';speakers.forEach((sp,i)=>{const color=SPEAKER_COLORS[i%SPEAKER_COLORS.length];(sp.lines||[]).slice(0,2).forEach((line,li)=>{const div=document.createElement('div');div.className='speaker-turn';div.style.animationDelay=(li*.06)+'s';div.innerHTML=`<div class="speaker-avatar" style="background:${color}">${sp.name.slice(-1)}</div><div style="flex:1">${li===0?`<div class="speaker-name" style="color:${color}">${esc(sp.name)}</div>`:''}<div class="speaker-quote">${esc(line)}</div></div>`;sl.appendChild(div);});});}else ss.style.display='none';
+  const il=document.getElementById('issuesList');il.innerHTML='';(d.issues||[]).forEach((iss,i)=>{const el=document.createElement('div');el.className='issue-card';el.style.animationDelay=(i*.05)+'s';el.innerHTML=`<div class="issue-title">${esc(iss.title)}</div><div class="issue-body">${esc(iss.content)}</div>`;il.appendChild(el);});
+  const dl=document.getElementById('decisionsList');dl.innerHTML='';(d.decisions||[]).forEach((dec,i)=>{const li=document.createElement('li');li.className='decision-item';li.style.animationDelay=(i*.04)+'s';li.innerHTML=`<div class="dec-dot"></div><span>${esc(dec)}</span>`;dl.appendChild(li);});
+  const al=document.getElementById('actionsList');al.innerHTML='';(d.actions||[]).forEach((a,i)=>{const el=document.createElement('div');el.className='action-card';el.style.animationDelay=(i*.05)+'s';el.innerHTML=`<div class="action-task">${esc(a.task)}</div><div class="action-meta">담당: ${esc(a.owner)} · 기한: ${esc(a.due)}</div>`;al.appendChild(el);});
+  document.getElementById('summaryContent').textContent=d.summary||'';
+  const sg=document.getElementById('suggestGrid');sg.innerHTML='';
+  if(d.suggestions?.length){d.suggestions.forEach((s,i)=>{const el=document.createElement('div');el.className='suggest-card';el.style.animationDelay=(i*.07)+'s';el.innerHTML=`<div class="suggest-tag">${esc(s.tag)}</div><div class="suggest-body">${esc(s.content)}</div>`;sg.appendChild(el);});document.getElementById('suggestSection').style.display='block';}
+  document.getElementById('emptyState').style.display='none';document.getElementById('minutesContent').style.display='block';
+  if(navigator.share)document.getElementById('nativeShareBtn').style.display='flex';
 }
 
 // ═══════════════════════════════════════════
 //   HISTORY
 // ═══════════════════════════════════════════
-function saveHistory(d) {
-  let h = getHistory();
-  h.unshift({ id: Date.now(), title: d.title || '회의록', date: d.date || new Date().toLocaleDateString('ko-KR'), data: d });
-  if (h.length > 60) h = h.slice(0, 60);
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(h)); } catch {}
+function saveHistory(d){let h=getHistory();h.unshift({id:Date.now(),title:d.title||'회의록',date:d.date||new Date().toLocaleDateString('ko-KR'),data:d});if(h.length>60)h=h.slice(0,60);try{localStorage.setItem(STORE_KEY,JSON.stringify(h));}catch{}}
+function getHistory(){try{return JSON.parse(localStorage.getItem(STORE_KEY)||'[]');}catch{return[];}}
+function renderHistory(){
+  const h=getHistory(),list=document.getElementById('historyList'),empty=document.getElementById('historyEmpty');list.innerHTML='';
+  if(!h.length){empty.style.display='block';return;}empty.style.display='none';
+  h.forEach((item,i)=>{const el=document.createElement('div');el.className='history-item';el.style.animationDelay=(i*.04)+'s';
+    el.innerHTML=`<div class="history-icon">📄</div><div style="flex:1"><div class="history-title">${esc(item.title)}</div><div class="history-meta">${esc(item.date)}</div></div><div class="history-del" onclick="delHistory(${item.id},event)">🗑</div>`;
+    el.onclick=()=>loadHistory(item);list.appendChild(el);});
 }
-function getHistory() {
-  try { return JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); } catch { return []; }
-}
-function renderHistory() {
-  const h = getHistory();
-  const list = document.getElementById('historyList');
-  const empty = document.getElementById('historyEmpty');
-  list.innerHTML = '';
-  if (!h.length) { empty.style.display = 'block'; return; }
-  empty.style.display = 'none';
-  h.forEach((item, i) => {
-    const el = document.createElement('div');
-    el.className = 'history-item'; el.style.animationDelay = (i * .04) + 's';
-    el.innerHTML = `
-      <div class="history-icon">📄</div>
-      <div style="flex:1">
-        <div class="history-title">${esc(item.title)}</div>
-        <div class="history-meta">${esc(item.date)}</div>
-      </div>
-      <div class="history-del" onclick="delHistory(${item.id},event)">🗑</div>`;
-    el.onclick = () => loadHistory(item);
-    list.appendChild(el);
-  });
-}
-function loadHistory(item) {
-  generatedData = item.data;
-  renderDoc(item.data, item.data.speakers || []);
-  switchTab('result');
-  document.querySelectorAll('.tab-item').forEach((t,i) => t.classList.toggle('active', i === 1));
-  showDesktopActions(true);
-  toast('✓ 회의록 불러오기 완료');
-}
-function delHistory(id, e) {
-  e.stopPropagation();
-  const h = getHistory().filter(i => i.id !== id);
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(h)); } catch {}
-  renderHistory(); toast('삭제되었습니다');
-}
+function loadHistory(item){generatedData=item.data;renderDoc(item.data,item.data.speakers||[]);switchTab('result');document.querySelectorAll('.tab-item').forEach((t,i)=>t.classList.toggle('active',i===1));showDesktopActions(true);toast('✓ 회의록 불러오기 완료');}
+function delHistory(id,e){e.stopPropagation();const h=getHistory().filter(i=>i.id!==id);try{localStorage.setItem(STORE_KEY,JSON.stringify(h));}catch{}renderHistory();toast('삭제되었습니다');}
 
 // ═══════════════════════════════════════════
-//   SHARE / EMAIL
+//   SHARE / EMAIL / COPY / PDF
 // ═══════════════════════════════════════════
-function openShare() {
-  if (!generatedData) { toast('먼저 회의록을 생성해주세요'); return; }
-  document.getElementById('shareSheet').classList.add('open');
-}
-function closeShare() { document.getElementById('shareSheet').classList.remove('open'); }
+function openShare(){if(!generatedData){toast('먼저 회의록을 생성해주세요');return;}document.getElementById('shareSheet').classList.add('open');}
+function closeShare(){document.getElementById('shareSheet').classList.remove('open');}
+function shareVia(type){const d=generatedData;if(!d)return;if(type==='copy'){copyText();closeShare();return;}if(type==='pdf'){downloadPDF();closeShare();return;}if(type==='native'){navigator.share({title:`[회의록] ${d.title}`,text:buildTextBody(d)}).catch(()=>{});closeShare();return;}if(type==='email'||type==='email-direct'){sendEmailDirect(d,document.getElementById('shareEmailInput').value);closeShare();}}
+function openEmail(){if(!generatedData){toast('먼저 회의록을 생성해주세요');return;}document.getElementById('emailModal').classList.add('open');}
+function closeEmail(){document.getElementById('emailModal').classList.remove('open');}
+function sendEmail(){sendEmailDirect(generatedData,document.getElementById('emailTo').value,document.getElementById('emailNote').value);closeEmail();}
+function sendEmailDirect(d,to,note){const subject=`[회의록] ${d.title||'회의'} — ${d.date||''}`;let body=note?`▶ 메모\n${note}\n\n`:'';body+=buildTextBody(d);window.location.href=`mailto:${encodeURIComponent(to||'')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;toast('✓ 이메일 클라이언트 열기');}
+function buildTextBody(d){let t=`[회의록] ${d.title||''}\n일시: ${d.date||'—'} | 장소: ${d.location||'—'} | 참석자: ${d.attendees||'—'}\n\n`;if(d.speakers?.length){t+=`▶ 화자별 발언\n`;d.speakers.forEach(sp=>{t+=`${sp.name}:\n`+(sp.lines||[]).map(l=>`  "${l}"`).join('\n')+'\n';});t+='\n';}t+=`▶ 결정 사항\n`+(d.decisions||[]).map((dec,i)=>`${i+1}. ${dec}`).join('\n')+'\n\n';t+=`▶ 액션 아이템\n`+(d.actions||[]).map(a=>`• ${a.task} (담당: ${a.owner}, 기한: ${a.due})`).join('\n')+'\n\n';t+=`▶ 요약\n${d.summary||''}\n\n---\n🎙️ AI Meeting Recorder`;return t;}
+function copyText(){if(!generatedData){toast('먼저 회의록을 생성해주세요');return;}navigator.clipboard.writeText(buildTextBody(generatedData)).then(()=>toast('✓ 클립보드에 복사됨'));}
 
-function shareVia(type) {
-  const d = generatedData; if (!d) return;
-  if (type === 'copy')  { copyText(); closeShare(); return; }
-  if (type === 'pdf')   { downloadPDF(); closeShare(); return; }
-  if (type === 'native') {
-    const text = buildTextBody(d);
-    navigator.share({ title: `[회의록] ${d.title}`, text }).catch(() => {});
-    closeShare(); return;
-  }
-  if (type === 'email' || type === 'email-direct') {
-    const to = document.getElementById('shareEmailInput').value;
-    sendEmailDirect(d, to);
-    closeShare();
-  }
-}
-
-function openEmail() {
-  if (!generatedData) { toast('먼저 회의록을 생성해주세요'); return; }
-  document.getElementById('emailModal').classList.add('open');
-}
-function closeEmail() { document.getElementById('emailModal').classList.remove('open'); }
-function sendEmail() {
-  const d = generatedData;
-  const to   = document.getElementById('emailTo').value;
-  const note = document.getElementById('emailNote').value;
-  sendEmailDirect(d, to, note);
-  closeEmail();
-}
-function sendEmailDirect(d, to, note) {
-  const subject = `[회의록] ${d.title || '회의'} — ${d.date || ''}`;
-  let body = note ? `▶ 메모\n${note}\n\n` : '';
-  body += buildTextBody(d);
-  window.location.href = `mailto:${encodeURIComponent(to || '')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  toast('✓ 이메일 클라이언트 열기');
-}
-
-function buildTextBody(d) {
-  let t = `[회의록] ${d.title || ''}\n일시: ${d.date||'—'} | 장소: ${d.location||'—'} | 참석자: ${d.attendees||'—'}\n\n`;
-  if (d.speakers?.length) {
-    t += `▶ 화자별 발언\n`;
-    d.speakers.forEach(sp => { t += `${sp.name}:\n` + (sp.lines||[]).map(l=>`  "${l}"`).join('\n') + '\n'; });
-    t += '\n';
-  }
-  t += `▶ 결정 사항\n` + (d.decisions||[]).map((dec,i)=>`${i+1}. ${dec}`).join('\n') + '\n\n';
-  t += `▶ 액션 아이템\n` + (d.actions||[]).map(a=>`• ${a.task} (담당: ${a.owner}, 기한: ${a.due})`).join('\n') + '\n\n';
-  t += `▶ 요약\n${d.summary||''}\n\n---\n🎙️ AI Meeting Recorder`;
-  return t;
-}
-
-function copyText() {
-  if (!generatedData) { toast('먼저 회의록을 생성해주세요'); return; }
-  navigator.clipboard.writeText(buildTextBody(generatedData)).then(() => toast('✓ 클립보드에 복사됨'));
-}
-
-// ═══════════════════════════════════════════
-//   PDF DOWNLOAD (→ iCloud Drive via Safari)
-// ═══════════════════════════════════════════
-function downloadPDF() {
-  if (!generatedData) return;
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-  const pw = 210, ph = 297, mg = 22, cw = pw - mg * 2;
-  let y = mg; const d = generatedData; const title = d.title || '회의록';
-
-  if (logoDataUrl) {
-    try { doc.addImage(logoDataUrl, 'PNG', mg, y, 26, 13, '', 'FAST'); } catch {}
-    doc.setFontSize(19); doc.setFont('helvetica', 'bold'); doc.setTextColor(237, 237, 238);
-    doc.text(title, mg + 32, y + 9); y += 20;
-  } else {
-    doc.setFontSize(20); doc.setFont('helvetica', 'bold'); doc.setTextColor(237, 237, 238);
-    doc.text(title, mg, y + 9); y += 16;
-  }
-  doc.setDrawColor(34, 34, 38); doc.setLineWidth(.4); doc.line(mg, y, pw-mg, y); y += 7;
-
-  const metas = [['일시', d.date||'—'], ['장소', d.location||document.getElementById('locationInput').value||'—'], ['참석자', d.attendees||'—'], ['작성일', new Date().toLocaleDateString('ko-KR')]];
-  metas.forEach(([k,v], i) => {
-    const col = i%2===0 ? mg : mg+cw/2+4;
-    if (i===2) y += 8;
-    doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(85,85,95);
-    doc.text(k, col, y);
-    doc.setFont('helvetica','normal'); doc.setTextColor(180,180,185); doc.setFontSize(10);
-    const ls = doc.splitTextToSize(v, cw/2-20);
-    doc.text(ls, col+16, y);
-  });
-  y += 13; doc.setDrawColor(34,34,38); doc.line(mg, y, pw-mg, y); y += 8;
-
-  function sec(heading, draw) {
-    if (y > ph-40) { doc.addPage(); y = mg; }
-    doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(10,132,255);
-    doc.text(heading, mg, y);
-    const lw = doc.getTextWidth(heading)+3;
-    doc.setDrawColor(34,34,38); doc.setLineWidth(.2); doc.line(mg+lw, y-1, pw-mg, y-1);
-    y += 6; doc.setFont('helvetica','normal'); doc.setTextColor(143,143,151); doc.setFontSize(10);
-    draw(); y += 6;
-  }
-
-  if (d.speakers?.length) {
-    sec('화자별 발언', () => {
-      d.speakers.forEach(sp => {
-        if (y > ph-20) { doc.addPage(); y = mg; }
-        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(237,237,238);
-        doc.text(sp.name+':', mg, y); y += 5.5;
-        doc.setFont('helvetica','italic'); doc.setTextColor(143,143,151);
-        (sp.lines||[]).slice(0,2).forEach(l => {
-          const ls = doc.splitTextToSize(`"${l}"`, cw-8);
-          ls.forEach(ll => { if (y>ph-20){doc.addPage();y=mg;} doc.text(ll, mg+4, y); y += 5.2; });
-        }); y += 2;
-      });
-    });
-  }
-
-  sec('주요 쟁점', () => {
-    (d.issues||[]).forEach(iss => {
-      if (y>ph-20){doc.addPage();y=mg;}
-      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(237,237,238);
-      doc.text('• '+iss.title, mg, y); y += 5.5;
-      doc.setFont('helvetica','normal'); doc.setTextColor(143,143,151);
-      const ls = doc.splitTextToSize('  '+iss.content, cw-6);
-      ls.forEach(l=>{if(y>ph-20){doc.addPage();y=mg;}doc.text(l,mg+4,y);y+=5.2;}); y+=2;
-    });
-  });
-
-  sec('결정 사항', () => {
-    (d.decisions||[]).forEach((dec,i) => {
-      if (y>ph-20){doc.addPage();y=mg;}
-      const ls = doc.splitTextToSize((i+1)+'. '+dec, cw);
-      ls.forEach(l=>{doc.text(l,mg,y);y+=5.5;});
-    });
-  });
-
-  sec('액션 아이템', () => {
-    (d.actions||[]).forEach(a => {
-      if (y>ph-22){doc.addPage();y=mg;}
-      doc.setFillColor(26,26,29); doc.rect(mg, y-3.5, cw, 12.5, 'F');
-      doc.setDrawColor(10,132,255); doc.setLineWidth(1.5); doc.line(mg, y-3.5, mg, y+9);
-      doc.setLineWidth(.2);
-      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(237,237,238);
-      doc.text(a.task, mg+4, y+1.5);
-      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(10,132,255);
-      doc.text(`담당: ${a.owner}  ·  기한: ${a.due}`, mg+4, y+7.5);
-      y += 16;
-    });
-  });
-
-  sec('회의 요약', () => {
-    const ls = doc.splitTextToSize(d.summary||'', cw);
-    ls.forEach(l=>{if(y>ph-20){doc.addPage();y=mg;}doc.text(l,mg,y);y+=5.5;});
-  });
-
-  const tp = doc.internal.getNumberOfPages();
-  for (let i=1; i<=tp; i++) {
-    doc.setPage(i);
-    doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(85,85,95);
-    doc.text('🎙️ AI Meeting Recorder  ·  '+title, mg, ph-9);
-    doc.text(i+'/'+tp, pw-mg, ph-9, { align: 'right' });
-  }
-
-  const fname = '회의록_' + title.replace(/[^a-zA-Z0-9가-힣]/g, '_') + '.pdf';
-  doc.save(fname);
-  toast('✓ PDF 저장 완료 — iCloud Drive에서 확인하세요');
+function downloadPDF(){
+  if(!generatedData)return;const{jsPDF}=window.jspdf,doc=new jsPDF({orientation:'p',unit:'mm',format:'a4'});
+  const pw=210,ph=297,mg=22,cw=pw-mg*2;let y=mg;const d=generatedData,title=d.title||'회의록';
+  if(logoDataUrl){try{doc.addImage(logoDataUrl,'PNG',mg,y,26,13,'','FAST');}catch{}doc.setFontSize(19);doc.setFont('helvetica','bold');doc.setTextColor(237,237,238);doc.text(title,mg+32,y+9);y+=20;}
+  else{doc.setFontSize(20);doc.setFont('helvetica','bold');doc.setTextColor(237,237,238);doc.text(title,mg,y+9);y+=16;}
+  doc.setDrawColor(34,34,38);doc.setLineWidth(.4);doc.line(mg,y,pw-mg,y);y+=7;
+  [['일시',d.date||'—'],['장소',d.location||document.getElementById('locationInput').value||'—'],['참석자',d.attendees||'—'],['작성일',new Date().toLocaleDateString('ko-KR')]].forEach(([k,v],i)=>{const col=i%2===0?mg:mg+cw/2+4;if(i===2)y+=8;doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(85,85,95);doc.text(k,col,y);doc.setFont('helvetica','normal');doc.setTextColor(180,180,185);doc.setFontSize(10);doc.text(doc.splitTextToSize(v,cw/2-20),col+16,y);});
+  y+=13;doc.setDrawColor(34,34,38);doc.line(mg,y,pw-mg,y);y+=8;
+  function sec(h,draw){if(y>ph-40){doc.addPage();y=mg;}doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(10,132,255);doc.text(h,mg,y);doc.setDrawColor(34,34,38);doc.setLineWidth(.2);doc.line(mg+doc.getTextWidth(h)+3,y-1,pw-mg,y-1);y+=6;doc.setFont('helvetica','normal');doc.setTextColor(143,143,151);doc.setFontSize(10);draw();y+=6;}
+  if(d.speakers?.length){sec('화자별 발언',()=>{d.speakers.forEach(sp=>{if(y>ph-20){doc.addPage();y=mg;}doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(237,237,238);doc.text(sp.name+':',mg,y);y+=5.5;doc.setFont('helvetica','italic');doc.setTextColor(143,143,151);(sp.lines||[]).slice(0,2).forEach(l=>{doc.splitTextToSize(`"${l}"`,cw-8).forEach(ll=>{if(y>ph-20){doc.addPage();y=mg;}doc.text(ll,mg+4,y);y+=5.2;});});y+=2;});});}
+  sec('주요 쟁점',()=>{(d.issues||[]).forEach(iss=>{if(y>ph-20){doc.addPage();y=mg;}doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(237,237,238);doc.text('• '+iss.title,mg,y);y+=5.5;doc.setFont('helvetica','normal');doc.setTextColor(143,143,151);doc.splitTextToSize('  '+iss.content,cw-6).forEach(l=>{if(y>ph-20){doc.addPage();y=mg;}doc.text(l,mg+4,y);y+=5.2;});y+=2;});});
+  sec('결정 사항',()=>{(d.decisions||[]).forEach((dec,i)=>{if(y>ph-20){doc.addPage();y=mg;}doc.splitTextToSize((i+1)+'. '+dec,cw).forEach(l=>{doc.text(l,mg,y);y+=5.5;});});});
+  sec('액션 아이템',()=>{(d.actions||[]).forEach(a=>{if(y>ph-22){doc.addPage();y=mg;}doc.setFillColor(26,26,29);doc.rect(mg,y-3.5,cw,12.5,'F');doc.setDrawColor(10,132,255);doc.setLineWidth(1.5);doc.line(mg,y-3.5,mg,y+9);doc.setLineWidth(.2);doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(237,237,238);doc.text(a.task,mg+4,y+1.5);doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(10,132,255);doc.text(`담당: ${a.owner}  ·  기한: ${a.due}`,mg+4,y+7.5);y+=16;});});
+  sec('회의 요약',()=>{doc.splitTextToSize(d.summary||'',cw).forEach(l=>{if(y>ph-20){doc.addPage();y=mg;}doc.text(l,mg,y);y+=5.5;});});
+  for(let i=1;i<=doc.internal.getNumberOfPages();i++){doc.setPage(i);doc.setFontSize(7);doc.setFont('helvetica','normal');doc.setTextColor(85,85,95);doc.text('🎙️ AI Meeting Recorder  ·  '+title,mg,ph-9);doc.text(i+'/'+doc.internal.getNumberOfPages(),pw-mg,ph-9,{align:'right'});}
+  doc.save('회의록_'+title.replace(/[^a-zA-Z0-9가-힣]/g,'_')+'.pdf');toast('✓ PDF 저장 완료 — iCloud Drive에서 확인하세요');
 }
 
 // ═══════════════════════════════════════════
 //   UI HELPERS
 // ═══════════════════════════════════════════
-function setLoading(on) {
-  document.getElementById('genBtn').disabled = on;
-  document.getElementById('genSpinner').style.display = on ? 'inline-flex' : 'none';
-  document.getElementById('genText').textContent = on ? '처리 중…' : '✦ 회의록 생성';
-  document.getElementById('progressWrap').style.display = on ? 'block' : 'none';
-  if (!on) { document.getElementById('progressFill').style.width = '0%'; document.getElementById('progressLabel').textContent = ''; }
-}
-function setProgress(label, pct) {
-  document.getElementById('progressLabel').textContent = label;
-  document.getElementById('progressFill').style.width = pct + '%';
-}
-function setStatus(type, text) {
-  const dot = document.getElementById('statusDot');
-  dot.className = 'status-dot' + (type ? ' ' + type : '');
-  document.getElementById('statusText').textContent = text;
-}
-function showDesktopActions(show) {
-  const ids = ['dShareBtn','dCopyBtn','dPdfBtn'];
-  ids.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = show ? 'inline-flex' : 'none'; });
-  const wrap = document.getElementById('desktopNavActions');
-  if (wrap) wrap.style.display = show ? 'flex' : 'none';
-}
-function toast(msg) {
-  clearTimeout(toastTimer);
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.className = 'toast show';
-  toastTimer = setTimeout(() => t.className = 'toast', 3000);
-}
-function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function setLoading(on){document.getElementById('genBtn').disabled=on;document.getElementById('genSpinner').style.display=on?'inline-flex':'none';document.getElementById('genText').textContent=on?'처리 중…':'✦ 회의록 생성';document.getElementById('progressWrap').style.display=on?'block':'none';if(!on){document.getElementById('progressFill').style.width='0%';document.getElementById('progressLabel').textContent='';}}
+function setProgress(label,pct){document.getElementById('progressLabel').textContent=label;document.getElementById('progressFill').style.width=pct+'%';}
+function setStatus(type,text){const dot=document.getElementById('statusDot');dot.className='status-dot'+(type?' '+type:'');document.getElementById('statusText').textContent=text;}
+function showDesktopActions(show){['dShareBtn','dCopyBtn','dPdfBtn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=show?'inline-flex':'none';});const w=document.getElementById('desktopNavActions');if(w)w.style.display=show?'flex':'none';}
+function toast(msg){clearTimeout(toastTimer);const t=document.getElementById('toast');t.textContent=msg;t.className='toast show';toastTimer=setTimeout(()=>t.className='toast',3500);}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 // ═══════════════════════════════════════════
 //   INIT
 // ═══════════════════════════════════════════
-window.addEventListener('load', () => {
-  updateOnlineStatus();
-  renderQueueBadge();
-
-  // Auto-detect location silently
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(async pos => {
-      const { latitude: lat, longitude: lng } = pos.coords;
-      try {
-        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ko`);
-        const d = await r.json(); const a = d.address;
-        let loc = '';
-        if (a.building) loc += a.building + ' ';
-        if (a.road)     loc += a.road + ' ';
-        if (a.suburb)   loc += a.suburb + ' ';
-        if (a.city || a.town) loc += (a.city || a.town);
-        const inp = document.getElementById('locationInput');
-        if (!inp.value) inp.value = loc.trim() || d.display_name;
-      } catch {}
-    }, () => {}, { timeout: 6000 });
-  }
-
-  // Desktop: always show record view + result side by side
-  if (window.innerWidth >= 1024) {
-    document.getElementById('view-record').classList.add('active');
-    document.getElementById('view-result').classList.add('active');
-    showDesktopActions(false);
-  }
+window.addEventListener('load',()=>{
+  checkFirstRun();updateOnlineStatus();renderQueueBadge();updateKeyStatuses();
+  if(getGhToken())initGist();
+  if(navigator.geolocation){navigator.geolocation.getCurrentPosition(async pos=>{const{latitude:lat,longitude:lng}=pos.coords;try{const r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ko`);const d=await r.json();const a=d.address;let loc='';if(a.building)loc+=a.building+' ';if(a.road)loc+=a.road+' ';if(a.suburb)loc+=a.suburb+' ';if(a.city||a.town)loc+=(a.city||a.town);const inp=document.getElementById('locationInput');if(!inp.value)inp.value=loc.trim()||d.display_name;}catch{}},()=>{},{timeout:6000});}
+  if(window.innerWidth>=1024){document.getElementById('view-record').classList.add('active');document.getElementById('view-result').classList.add('active');showDesktopActions(false);}
 });
 </script>
 </body>
