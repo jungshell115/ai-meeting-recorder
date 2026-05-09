@@ -1,0 +1,2021 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Meeting">
+<meta name="theme-color" content="#000000">
+<title>🎙️ AI Meeting Recorder</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+<style>
+/* ═══════════════════════════════════════════
+   TOKENS
+═══════════════════════════════════════════ */
+:root {
+  --bg:       #0a0a0b;
+  --bg2:      #111113;
+  --bg3:      #1a1a1d;
+  --bg4:      #222226;
+  --border:   rgba(255,255,255,.07);
+  --border2:  rgba(255,255,255,.12);
+  --text:     #ededee;
+  --text2:    #8f8f97;
+  --text3:    #55555f;
+  --accent:   #0a84ff;
+  --accent2:  #30d158;
+  --warn:     #ff9f0a;
+  --danger:   #ff453a;
+  --r-xs:4px; --r-sm:8px; --r-md:12px; --r-lg:18px; --r-xl:24px; --r-pill:999px;
+  --font-ui:  'Noto Sans KR', system-ui, sans-serif;
+  --font-mono:'DM Mono', monospace;
+  --nav-h:    52px;
+  --tab-h:    56px;
+  --ease:     cubic-bezier(.4,0,.2,1);
+  --spring:   cubic-bezier(.34,1.56,.64,1);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bot: env(safe-area-inset-bottom, 0px);
+}
+
+/* ═══════════════════════════════════════════
+   RESET & BASE
+═══════════════════════════════════════════ */
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+html { height:100%; overflow:hidden; }
+body {
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--text);
+  height: 100%;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══════════════════════════════════════════
+   KEYFRAMES
+═══════════════════════════════════════════ */
+@keyframes fadeUp   { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+@keyframes fadeIn   { from{opacity:0} to{opacity:1} }
+@keyframes scaleIn  { from{opacity:0;transform:scale(.92)} to{opacity:1;transform:scale(1)} }
+@keyframes spin     { to{transform:rotate(360deg)} }
+@keyframes pulse-r  { 0%,100%{box-shadow:0 0 0 0 rgba(255,69,58,.5)} 60%{box-shadow:0 0 0 8px rgba(255,69,58,0)} }
+@keyframes pulse-b  { 0%,100%{opacity:1} 50%{opacity:.35} }
+@keyframes sheetUp  { from{transform:translateY(100%)} to{transform:translateY(0)} }
+@keyframes waveIdle { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(.25)} }
+@keyframes progress { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+@keyframes dotPop   { 0%{transform:scale(1)} 50%{transform:scale(1.5)} 100%{transform:scale(1)} }
+
+/* ═══════════════════════════════════════════
+   LAYOUT SHELL
+═══════════════════════════════════════════ */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding-top: var(--safe-top);
+}
+
+/* ═══════════════════════════════════════════
+   TOP NAV
+═══════════════════════════════════════════ */
+.top-nav {
+  flex-shrink: 0;
+  height: var(--nav-h);
+  background: rgba(10,10,11,.9);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  position: relative;
+  z-index: 100;
+}
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: .02em;
+}
+.brand-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-b 3s ease-in-out infinite;
+}
+.nav-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+.status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--text3);
+  transition: background .4s, box-shadow .4s;
+}
+.status-dot.live   { background: var(--danger);  animation: pulse-r 1.4s ease-in-out infinite; }
+.status-dot.done   { background: var(--accent2); box-shadow: 0 0 0 3px rgba(48,209,88,.2); }
+.status-dot.queued { background: var(--warn);    animation: pulse-b 1.5s ease-in-out infinite; }
+.nav-actions { display: flex; gap: 6px; }
+
+/* ═══════════════════════════════════════════
+   MAIN CONTENT AREA
+═══════════════════════════════════════════ */
+.main {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* ═══════════════════════════════════════════
+   VIEWS (mobile: stack, desktop: side-by-side)
+═══════════════════════════════════════════ */
+.view {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  display: none;
+}
+.view.active { display: flex; flex-direction: column; }
+
+/* Scrollbar */
+.view::-webkit-scrollbar { width: 3px; }
+.view::-webkit-scrollbar-track { background: transparent; }
+.view::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ═══════════════════════════════════════════
+   BOTTOM TAB BAR (mobile & tablet)
+═══════════════════════════════════════════ */
+.tab-bar {
+  flex-shrink: 0;
+  height: calc(var(--tab-h) + var(--safe-bot));
+  padding-bottom: var(--safe-bot);
+  background: rgba(10,10,11,.95);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: stretch;
+  z-index: 100;
+}
+.tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  cursor: pointer;
+  transition: opacity .15s;
+  border: none;
+  background: none;
+  color: var(--text3);
+  font-family: var(--font-ui);
+  padding: 0;
+}
+.tab-item.active { color: var(--accent); }
+.tab-item:active { opacity: .6; }
+.tab-icon { font-size: 22px; line-height: 1; transition: transform .2s var(--spring); }
+.tab-item.active .tab-icon { transform: scale(1.1); }
+.tab-label { font-size: 10px; font-weight: 500; letter-spacing: .02em; }
+
+/* ═══════════════════════════════════════════
+   SECTIONS & CARDS
+═══════════════════════════════════════════ */
+.section { padding: 16px; }
+.section + .section { padding-top: 0; }
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 10px;
+}
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  transition: border-color .2s;
+}
+.card-body { padding: 16px; }
+.card + .card { margin-top: 10px; }
+
+/* ═══════════════════════════════════════════
+   BUTTONS
+═══════════════════════════════════════════ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: var(--r-pill);
+  font-family: var(--font-ui);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s var(--ease);
+  white-space: nowrap;
+  -webkit-appearance: none;
+}
+.btn:active { transform: scale(.95); }
+.btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+.btn-primary   { background: var(--accent);  color: #fff; padding: 10px 20px; font-size: 14px; }
+.btn-primary:hover { filter: brightness(1.1); }
+.btn-secondary { background: rgba(10,132,255,.12); color: var(--accent); padding: 9px 18px; font-size: 13px; border: 1px solid rgba(10,132,255,.25); }
+.btn-ghost     { background: var(--bg3); color: var(--text2); padding: 9px 16px; font-size: 13px; border: 1px solid var(--border); }
+.btn-ghost:hover { border-color: var(--border2); color: var(--text); }
+.btn-danger    { background: rgba(255,69,58,.12); color: var(--danger); padding: 9px 16px; font-size: 13px; border: 1px solid rgba(255,69,58,.2); }
+.btn-icon      { background: var(--bg3); color: var(--text2); width: 36px; height: 36px; border-radius: var(--r-md); border: 1px solid var(--border); padding: 0; font-size: 16px; flex-shrink: 0; }
+.btn-full      { width: 100%; padding: 13px; font-size: 15px; font-weight: 700; border-radius: var(--r-lg); }
+
+/* ═══════════════════════════════════════════
+   FORM FIELDS
+═══════════════════════════════════════════ */
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 11px; color: var(--text3); font-weight: 400; }
+.field input, .field textarea {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: var(--font-ui);
+  color: var(--text);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+  -webkit-appearance: none;
+  width: 100%;
+}
+.field input:focus, .field textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(10,132,255,.15);
+}
+.field input::placeholder, .field textarea::placeholder { color: var(--text3); }
+.field textarea { resize: none; min-height: 80px; line-height: 1.6; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.field-row.single { grid-template-columns: 1fr; }
+
+/* ═══════════════════════════════════════════
+   ── VIEW 1: RECORDER ──
+═══════════════════════════════════════════ */
+
+/* Big record button */
+.rec-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 16px 20px;
+  gap: 16px;
+}
+.rec-ring {
+  position: relative;
+  width: 140px; height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rec-ring-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  transform: rotate(-90deg);
+}
+.rec-ring-track { fill: none; stroke: var(--bg3); stroke-width: 3; }
+.rec-ring-fill  { fill: none; stroke: var(--danger); stroke-width: 3; stroke-dasharray: 408; stroke-dashoffset: 408; stroke-linecap: round; transition: stroke-dashoffset .5s var(--ease); }
+.rec-btn-circle {
+  width: 108px; height: 108px;
+  border-radius: 50%;
+  background: var(--bg3);
+  border: 2px solid var(--border2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all .25s var(--spring);
+  font-size: 42px;
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+}
+.rec-btn-circle:hover  { transform: scale(1.04); border-color: var(--danger); }
+.rec-btn-circle.active { border-color: var(--danger); background: rgba(255,69,58,.1); animation: pulse-r 1.4s ease-in-out infinite; }
+.rec-btn-circle:active { transform: scale(.95); }
+.rec-time {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  font-weight: 400;
+  color: var(--text);
+  letter-spacing: .06em;
+  font-variant-numeric: tabular-nums;
+  transition: color .3s;
+}
+.rec-time.live { color: var(--danger); }
+.rec-label { font-size: 13px; color: var(--text3); }
+
+/* Waveform */
+.waveform {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 32px;
+}
+.wbar {
+  width: 3px;
+  border-radius: 2px;
+  background: var(--bg4);
+  height: 6px;
+  transition: background .3s;
+  transform-origin: center;
+}
+.waveform.live .wbar { background: rgba(255,69,58,.6); }
+
+/* Upload zone */
+.upload-zone {
+  border: 1.5px dashed var(--border2);
+  border-radius: var(--r-lg);
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s;
+  background: transparent;
+  display: block;
+}
+.upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(10,132,255,.05); }
+.upload-zone p { font-size: 13px; color: var(--text2); margin-bottom: 2px; }
+.upload-zone span { font-size: 11px; color: var(--text3); }
+
+/* File badge */
+.file-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+  animation: fadeUp .25s var(--ease) both;
+}
+.file-badge-name { flex: 1; font-size: 13px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-badge-rm { cursor: pointer; color: var(--text3); font-size: 18px; transition: color .15s; flex-shrink: 0; }
+.file-badge-rm:hover { color: var(--danger); }
+
+/* Offline queue badge */
+.queue-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,159,10,.08);
+  border: 1px solid rgba(255,159,10,.2);
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--warn);
+  animation: fadeUp .3s var(--ease) both;
+}
+.queue-badge-count {
+  background: var(--warn);
+  color: #000;
+  font-weight: 700;
+  font-size: 11px;
+  border-radius: var(--r-pill);
+  padding: 2px 7px;
+  min-width: 22px;
+  text-align: center;
+}
+
+/* Location row */
+.loc-row { display: flex; gap: 8px; }
+.loc-row .field { flex: 1; }
+.loc-btn {
+  flex-shrink: 0;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text2);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  padding: 0 12px;
+  height: 42px;
+  margin-top: 16px;
+  cursor: pointer;
+  transition: all .15s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.loc-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Logo upload */
+.logo-row { display: flex; gap: 10px; align-items: center; }
+.logo-thumb {
+  width: 44px; height: 44px;
+  border-radius: var(--r-sm);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; flex-shrink: 0; overflow: hidden;
+}
+.logo-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.logo-upload-btn {
+  flex: 1;
+  background: var(--bg3);
+  border: 1.5px dashed var(--border);
+  border-radius: var(--r-sm);
+  padding: 10px;
+  text-align: center;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text3);
+  transition: all .15s;
+  display: block;
+}
+.logo-upload-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Progress */
+.progress-wrap { display: none; animation: fadeIn .3s var(--ease); }
+.progress-bar-bg { height: 2px; background: var(--bg3); border-radius: 1px; overflow: hidden; margin-bottom: 6px; }
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #60b4ff, var(--accent));
+  background-size: 200% 100%;
+  border-radius: 1px;
+  width: 0%;
+  transition: width .5s var(--ease);
+  animation: progress 2s linear infinite;
+}
+.progress-label { font-family: var(--font-mono); font-size: 11px; color: var(--text3); text-align: center; }
+
+/* ═══════════════════════════════════════════
+   ── VIEW 2: MINUTES RESULT ──
+═══════════════════════════════════════════ */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 40px 24px;
+  text-align: center;
+}
+.empty-icon {
+  width: 72px; height: 72px;
+  border-radius: 20px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 32px;
+  box-shadow: rgba(0,0,0,.4) 0 8px 32px;
+  animation: scaleIn .4s var(--spring) both;
+}
+.empty-state h2 { font-size: 18px; font-weight: 700; color: var(--text); }
+.empty-state p  { font-size: 13px; color: var(--text3); line-height: 1.6; max-width: 240px; }
+
+/* Minutes doc */
+.minutes-doc {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  animation: scaleIn .4s var(--spring) both;
+}
+.doc-hero {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.doc-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 4px;
+}
+.doc-title { font-size: 20px; font-weight: 700; color: var(--text); line-height: 1.25; }
+.doc-logo  { height: 32px; max-width: 80px; object-fit: contain; display: none; }
+
+.doc-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--border);
+}
+.meta-cell {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.meta-cell:nth-child(odd)  { border-right: 1px solid var(--border); }
+.meta-cell:nth-last-child(-n+2) { border-bottom: none; }
+.meta-key { font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); margin-bottom: 3px; }
+.meta-val { font-size: 12px; color: var(--text); line-height: 1.4; }
+
+.doc-section { padding: 16px; border-bottom: 1px solid var(--border); }
+.doc-section:last-child { border-bottom: none; }
+.sec-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.sec-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); white-space: nowrap; }
+.sec-line  { flex: 1; height: 1px; background: var(--border); }
+
+/* Speaker rows */
+.speaker-turn {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  animation: fadeUp .3s var(--ease) both;
+}
+.speaker-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: #fff;
+  flex-shrink: 0;
+}
+.speaker-name  { font-size: 11px; font-weight: 600; margin-bottom: 3px; }
+.speaker-quote {
+  font-size: 13px; color: var(--text2); line-height: 1.5;
+  background: var(--bg3); padding: 9px 12px;
+  border-radius: 0 var(--r-md) var(--r-md) var(--r-md);
+  border: 1px solid var(--border);
+}
+
+/* Issue card */
+.issue-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  transition: border-color .15s, transform .15s;
+  animation: fadeUp .3s var(--ease) both;
+}
+.issue-card:hover { border-color: var(--border2); transform: translateX(2px); }
+.issue-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.issue-body  { font-size: 13px; color: var(--text2); line-height: 1.5; }
+
+/* Decision */
+.decision-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.5;
+  animation: fadeUp .3s var(--ease) both;
+}
+.decision-item:last-child { border-bottom: none; }
+.dec-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; margin-top: 5px; }
+
+/* Action card */
+.action-card {
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  background: var(--bg3);
+  padding: 11px 13px;
+  margin-bottom: 8px;
+  border-top: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transition: transform .15s;
+  animation: fadeUp .3s var(--ease) both;
+}
+.action-card:hover { transform: translateX(2px); }
+.action-task { font-size: 13px; color: var(--text); margin-bottom: 3px; }
+.action-meta { font-size: 11px; color: var(--accent); font-family: var(--font-mono); }
+
+.summary-block {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 14px;
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.7;
+}
+
+/* Suggestions */
+.suggest-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.suggest-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 12px;
+  cursor: pointer;
+  transition: border-color .15s, transform .2s var(--spring);
+  animation: scaleIn .35s var(--spring) both;
+}
+.suggest-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.suggest-tag  { font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: 5px; }
+.suggest-body { font-size: 12px; color: var(--text2); line-height: 1.5; }
+
+/* Doc footer */
+.doc-footer-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* ═══════════════════════════════════════════
+   ── VIEW 3: HISTORY ──
+═══════════════════════════════════════════ */
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: border-color .15s, transform .15s;
+  animation: fadeUp .3s var(--ease) both;
+}
+.history-item + .history-item { margin-top: 8px; }
+.history-item:hover { border-color: var(--border2); transform: translateX(3px); }
+.history-icon { font-size: 22px; flex-shrink: 0; }
+.history-title { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.3; }
+.history-meta  { font-size: 11px; color: var(--text3); margin-top: 2px; font-family: var(--font-mono); }
+.history-del   { color: var(--text3); font-size: 16px; cursor: pointer; padding: 6px; border-radius: var(--r-sm); transition: all .15s; flex-shrink: 0; }
+.history-del:hover { color: var(--danger); background: rgba(255,69,58,.1); }
+
+/* ═══════════════════════════════════════════
+   BOTTOM SHEET (share / email)
+═══════════════════════════════════════════ */
+.sheet-overlay {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,.5);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s var(--ease);
+}
+.sheet-overlay.open { opacity: 1; pointer-events: all; }
+.sheet {
+  background: var(--bg2);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  padding-bottom: calc(16px + var(--safe-bot));
+  transform: translateY(100%);
+  transition: transform .35s var(--spring);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.sheet-overlay.open .sheet { transform: translateY(0); }
+.sheet-handle { width: 40px; height: 4px; border-radius: 2px; background: var(--border2); margin: 12px auto 20px; }
+.sheet-title { font-size: 17px; font-weight: 700; color: var(--text); padding: 0 20px; margin-bottom: 16px; }
+.share-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 0 16px; margin-bottom: 20px; }
+.share-btn-item { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; padding: 12px 8px; border-radius: var(--r-lg); transition: background .15s, transform .15s var(--spring); }
+.share-btn-item:hover { background: var(--bg3); transform: scale(1.04); }
+.share-btn-item:active { transform: scale(.94); }
+.share-icon { width: 48px; height: 48px; border-radius: var(--r-md); display: flex; align-items: center; justify-content: center; font-size: 24px; }
+.share-btn-label { font-size: 11px; color: var(--text2); text-align: center; }
+.sheet-divider { height: 1px; background: var(--border); margin: 0 0 16px; }
+.sheet-form { padding: 0 16px; display: flex; flex-direction: column; gap: 10px; }
+.sheet-actions { display: flex; gap: 8px; padding: 16px; }
+
+/* ═══════════════════════════════════════════
+   MODAL (generic)
+═══════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 600;
+  background: rgba(0,0,0,.5);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--r-xl);
+  padding: 24px;
+  width: 100%; max-width: 420px;
+  transform: scale(.94);
+  transition: transform .25s var(--spring);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.modal-overlay.open .modal { transform: scale(1); }
+.modal-title { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.modal-sub   { font-size: 13px; color: var(--text3); margin-bottom: 18px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+/* ═══════════════════════════════════════════
+   TRANSCRIPT PREVIEW
+═══════════════════════════════════════════ */
+.transcript-preview {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text2);
+  line-height: 1.6;
+  max-height: 80px;
+  overflow-y: auto;
+  display: none;
+  animation: slideDown .3s var(--ease) both;
+}
+@keyframes slideDown { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+
+/* ═══════════════════════════════════════════
+   TOAST
+═══════════════════════════════════════════ */
+.toast {
+  position: fixed;
+  bottom: calc(var(--tab-h) + var(--safe-bot) + 12px);
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: var(--bg4);
+  border: 1px solid var(--border2);
+  border-radius: var(--r-pill);
+  padding: 10px 18px;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s, transform .25s var(--spring);
+  z-index: 800;
+  white-space: nowrap;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ═══════════════════════════════════════════
+   ── TABLET (≥ 640px) ──
+═══════════════════════════════════════════ */
+@media (min-width: 640px) {
+  body { font-size: 15px; }
+  .section { padding: 20px; }
+  .suggest-grid { grid-template-columns: 1fr 1fr; }
+  .share-grid { grid-template-columns: repeat(4, 1fr); }
+  .toast { bottom: calc(var(--tab-h) + var(--safe-bot) + 20px); }
+}
+
+/* ═══════════════════════════════════════════
+   ── DESKTOP (≥ 1024px): side-by-side layout ──
+═══════════════════════════════════════════ */
+@media (min-width: 1024px) {
+  .main {
+    flex-direction: row;
+  }
+
+  /* Hide tab bar on desktop, show sidebar nav instead */
+  .tab-bar { display: none; }
+
+  /* Left sidebar */
+  #view-record {
+    display: flex !important;
+    width: 380px;
+    min-width: 340px;
+    max-width: 420px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+  }
+
+  /* Right panel: result or history */
+  #view-result, #view-history {
+    flex: 1;
+    overflow-y: auto;
+  }
+  #view-result  { display: flex; }
+  #view-history { display: none; }
+  #view-history.active { display: flex; }
+  #view-result:not(.force-hide) { display: flex; }
+
+  /* Desktop top-nav gets tab buttons */
+  .desktop-tabs { display: flex; gap: 4px; }
+  .desktop-tab {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text3);
+    padding: 5px 12px;
+    border-radius: var(--r-pill);
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    font-family: var(--font-ui);
+    transition: all .15s;
+  }
+  .desktop-tab.active { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+  .desktop-tab:hover:not(.active) { color: var(--text2); }
+
+  .toast { bottom: 24px; }
+  .sheet { max-width: 480px; margin: 0 auto; border-radius: var(--r-xl); }
+  .sheet-overlay { align-items: center; }
+  .sheet { transform: scale(.94); }
+  .sheet-overlay.open .sheet { transform: scale(1); }
+
+  .suggest-grid { grid-template-columns: 1fr 1fr; }
+  .rec-hero { padding: 36px 24px 24px; }
+  .rec-ring { width: 160px; height: 160px; }
+  .rec-btn-circle { width: 124px; height: 124px; font-size: 48px; }
+  .rec-ring-fill { stroke-dasharray: 471; stroke-dashoffset: 471; }
+}
+
+/* ═══════════════════════════════════════════
+   ── WIDE DESKTOP (≥ 1440px) ──
+═══════════════════════════════════════════ */
+@media (min-width: 1440px) {
+  #view-record { width: 420px; }
+}
+
+/* ═══════════════════════════════════════════
+   DESKTOP NAV — hide desktop-tabs on mobile
+═══════════════════════════════════════════ */
+.desktop-tabs { display: none; }
+.desktop-nav-actions { display: none; }
+@media (min-width: 1024px) {
+  .desktop-tabs { display: flex; }
+  .desktop-nav-actions { display: flex; gap: 6px; }
+  .mobile-only { display: none !important; }
+}
+
+/* Online/offline pill */
+.online-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid;
+  transition: all .3s;
+}
+.online-pill.online  { color: var(--accent2); border-color: rgba(48,209,88,.3); background: rgba(48,209,88,.08); }
+.online-pill.offline { color: var(--warn);    border-color: rgba(255,159,10,.3); background: rgba(255,159,10,.08); }
+.online-pill.offline.queued { animation: pulse-b 1.5s ease-in-out infinite; }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ── TOP NAV ── -->
+  <nav class="top-nav">
+    <div class="nav-brand">
+      <div class="brand-dot"></div>
+      🎙️ AI Meeting Recorder
+    </div>
+
+    <!-- Desktop: tab buttons in nav -->
+    <div class="desktop-tabs">
+      <button class="desktop-tab active" onclick="desktopTab('result', this)">회의록</button>
+      <button class="desktop-tab" onclick="desktopTab('history', this)">보관함</button>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="online-pill online" id="onlinePill">
+        <span id="onlineDot" class="status-dot done" style="width:5px;height:5px"></span>
+        <span id="onlineText">온라인</span>
+      </div>
+      <div class="nav-status mobile-only">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">대기 중</span>
+      </div>
+      <!-- Desktop action buttons -->
+      <div class="desktop-nav-actions" id="desktopNavActions" style="display:none">
+        <button class="btn btn-ghost" onclick="openShare()" id="dShareBtn" style="display:none">↗ 공유</button>
+        <button class="btn btn-ghost" onclick="copyText()" id="dCopyBtn" style="display:none">복사</button>
+        <button class="btn btn-primary" onclick="downloadPDF()" id="dPdfBtn" style="display:none">↓ PDF</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── MAIN ── -->
+  <div class="main">
+
+    <!-- ── VIEW 1: RECORDER (left panel on desktop) ── -->
+    <div class="view active" id="view-record">
+
+      <!-- Big record button -->
+      <div class="rec-hero">
+        <div class="rec-ring">
+          <svg class="rec-ring-svg" viewBox="0 0 140 140">
+            <circle class="rec-ring-track" cx="70" cy="70" r="65"/>
+            <circle class="rec-ring-fill" id="recRingFill" cx="70" cy="70" r="65"/>
+          </svg>
+          <button class="rec-btn-circle" id="recBtn" onclick="toggleRecord()">🎙️</button>
+        </div>
+        <div class="rec-time" id="recTime">00:00</div>
+        <div class="waveform" id="waveform">
+          <div class="wbar" style="height:8px"></div><div class="wbar" style="height:14px"></div>
+          <div class="wbar" style="height:10px"></div><div class="wbar" style="height:18px"></div>
+          <div class="wbar" style="height:12px"></div><div class="wbar" style="height:20px"></div>
+          <div class="wbar" style="height:10px"></div><div class="wbar" style="height:16px"></div>
+          <div class="wbar" style="height:8px"></div><div class="wbar" style="height:14px"></div>
+          <div class="wbar" style="height:18px"></div><div class="wbar" style="height:10px"></div>
+        </div>
+        <div class="rec-label" id="recLabel">탭하여 녹음 시작</div>
+      </div>
+
+      <!-- Upload -->
+      <div class="section" style="padding-top:0">
+        <div class="section-label">파일 업로드</div>
+        <label class="upload-zone" id="uploadZone"
+          ondragover="event.preventDefault();this.classList.add('drag')"
+          ondragleave="this.classList.remove('drag')"
+          ondrop="handleDrop(event)">
+          <input type="file" id="audioFile" accept="audio/*,video/*" style="display:none" onchange="handleFile(this.files[0])">
+          <p>🎵 MP3 · M4A · WAV · MP4</p>
+          <span>드래그하거나 탭해서 선택</span>
+        </label>
+        <div id="fileBadge" style="display:none;margin-top:8px" class="file-badge">
+          <span>🎵</span>
+          <span class="file-badge-name" id="fileName"></span>
+          <span class="file-badge-rm" onclick="removeFile()">×</span>
+        </div>
+      </div>
+
+      <!-- Offline queue notice -->
+      <div class="section" style="padding-top:0;display:none" id="queueSection">
+        <div class="queue-badge">
+          <span>📴 오프라인 대기 중</span>
+          <span class="queue-badge-count" id="queueCount">0</span>
+          <span style="flex:1;font-size:12px">온라인 복귀 시 자동 처리</span>
+        </div>
+      </div>
+
+      <!-- Transcript preview -->
+      <div class="section" style="padding-top:0">
+        <div class="transcript-preview" id="transcriptPreview"></div>
+      </div>
+
+      <!-- Basic info -->
+      <div class="section" style="padding-top:0">
+        <div class="section-label">기본 정보 (AI 자동 추출)</div>
+        <div class="card">
+          <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+            <div class="field field-row single">
+              <label>회의 제목</label>
+              <input type="text" id="meetingTitle" placeholder="녹음 후 자동 입력">
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>일시</label>
+                <input type="text" id="meetingDate" placeholder="자동 입력">
+              </div>
+              <div class="field">
+                <label>참석자</label>
+                <input type="text" id="meetingAttendees" placeholder="자동 입력">
+              </div>
+            </div>
+            <div class="loc-row">
+              <div class="field">
+                <label>장소</label>
+                <input type="text" id="locationInput" placeholder="위치 버튼 또는 직접 입력">
+              </div>
+              <button class="loc-btn" id="locBtn" onclick="getLocation()">📍 현재위치</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Logo -->
+      <div class="section" style="padding-top:0">
+        <div class="section-label">회사 로고</div>
+        <div class="logo-row">
+          <div class="logo-thumb" id="logoThumb">🏢</div>
+          <label class="logo-upload-btn" onclick="document.getElementById('logoFile').click()">
+            <input type="file" id="logoFile" accept="image/*" style="display:none" onchange="handleLogo(this.files[0])">
+            로고 업로드 (PNG, JPG)
+          </label>
+        </div>
+      </div>
+
+      <!-- Generate -->
+      <div class="section" style="padding-top:0">
+        <button class="btn btn-primary btn-full" id="genBtn" onclick="generate()">
+          <span id="genSpinner" style="display:none;width:15px;height:15px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0"></span>
+          <span id="genText">✦ 회의록 생성</span>
+        </button>
+        <div class="progress-wrap" id="progressWrap" style="margin-top:12px">
+          <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+          <div class="progress-label" id="progressLabel"></div>
+        </div>
+      </div>
+
+      <div style="height:8px"></div>
+    </div><!-- /view-record -->
+
+    <!-- ── VIEW 2: RESULT ── -->
+    <div class="view" id="view-result">
+
+      <!-- Empty state -->
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">📋</div>
+        <h2>회의록이 여기 나타납니다</h2>
+        <p>왼쪽에서 녹음하거나 파일을 업로드한 뒤 생성 버튼을 누르세요</p>
+      </div>
+
+      <!-- Minutes content -->
+      <div class="section" id="minutesContent" style="display:none">
+
+        <!-- AI 제안 -->
+        <div id="suggestSection" style="display:none;margin-bottom:12px">
+          <div class="section-label">✦ AI 효율화 제안</div>
+          <div class="suggest-grid" id="suggestGrid"></div>
+        </div>
+
+        <!-- Minutes doc -->
+        <div class="minutes-doc" id="minutesDoc">
+          <div class="doc-hero">
+            <div style="flex:1">
+              <div class="doc-eyebrow">MEETING MINUTES</div>
+              <div class="doc-title" id="docTitle">회의록</div>
+            </div>
+            <img class="doc-logo" id="docLogo" alt="logo">
+          </div>
+
+          <div class="doc-meta">
+            <div class="meta-cell"><div class="meta-key">일시</div><div class="meta-val" id="docDate">—</div></div>
+            <div class="meta-cell"><div class="meta-key">장소</div><div class="meta-val" id="docLocation">—</div></div>
+            <div class="meta-cell"><div class="meta-key">참석자</div><div class="meta-val" id="docAttendees">—</div></div>
+            <div class="meta-cell"><div class="meta-key">작성일</div><div class="meta-val" id="docCreated">—</div></div>
+          </div>
+
+          <!-- Speaker section -->
+          <div class="doc-section" id="speakerSection" style="display:none">
+            <div class="sec-head"><div class="sec-label">화자별 발언</div><div class="sec-line"></div></div>
+            <div id="speakerList"></div>
+          </div>
+
+          <div class="doc-section">
+            <div class="sec-head"><div class="sec-label">주요 쟁점</div><div class="sec-line"></div></div>
+            <div id="issuesList"></div>
+          </div>
+          <div class="doc-section">
+            <div class="sec-head"><div class="sec-label">결정 사항</div><div class="sec-line"></div></div>
+            <ul id="decisionsList" style="list-style:none"></ul>
+          </div>
+          <div class="doc-section">
+            <div class="sec-head"><div class="sec-label">액션 아이템</div><div class="sec-line"></div></div>
+            <div id="actionsList"></div>
+          </div>
+          <div class="doc-section">
+            <div class="sec-head"><div class="sec-label">회의 요약</div><div class="sec-line"></div></div>
+            <div class="summary-block" id="summaryContent"></div>
+          </div>
+
+          <div class="doc-footer-row" style="justify-content:space-between;padding-top:12px;border-top:1px solid var(--border)">
+            <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3)">🎙️ AI Meeting Recorder</span>
+            <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3)" id="docFooterDate"></span>
+          </div>
+        </div>
+
+        <!-- Action row -->
+        <div class="doc-footer-row" style="margin-top:10px;padding:0">
+          <button class="btn btn-ghost" onclick="openShare()">↗ 공유</button>
+          <button class="btn btn-ghost" onclick="copyText()">📋 복사</button>
+          <button class="btn btn-ghost" onclick="openEmail()">📧 이메일</button>
+          <button class="btn btn-primary" onclick="downloadPDF()">↓ PDF·iCloud</button>
+        </div>
+      </div>
+    </div><!-- /view-result -->
+
+    <!-- ── VIEW 3: HISTORY ── -->
+    <div class="view" id="view-history">
+      <div class="section">
+        <div class="section-label">저장된 회의록</div>
+        <div id="historyList"></div>
+        <div id="historyEmpty" style="text-align:center;padding:40px 0;color:var(--text3);font-size:13px;display:none">
+          저장된 회의록이 없습니다
+        </div>
+      </div>
+    </div><!-- /view-history -->
+
+  </div><!-- /main -->
+
+  <!-- ── BOTTOM TAB BAR (mobile/tablet) ── -->
+  <div class="tab-bar" id="tabBar">
+    <button class="tab-item active" onclick="switchTab('record',this)">
+      <span class="tab-icon">🎙️</span>
+      <span class="tab-label">녹음</span>
+    </button>
+    <button class="tab-item" onclick="switchTab('result',this)">
+      <span class="tab-icon">📋</span>
+      <span class="tab-label">회의록</span>
+    </button>
+    <button class="tab-item" onclick="switchTab('history',this)">
+      <span class="tab-icon">🗂️</span>
+      <span class="tab-label">보관함</span>
+    </button>
+  </div>
+
+</div><!-- /app -->
+
+<!-- ── SHARE SHEET ── -->
+<div class="sheet-overlay" id="shareSheet" onclick="if(event.target===this)closeShare()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">공유하기</div>
+    <div class="share-grid">
+      <div class="share-btn-item" onclick="shareVia('copy')">
+        <div class="share-icon" style="background:var(--bg3)">📋</div>
+        <div class="share-btn-label">텍스트 복사</div>
+      </div>
+      <div class="share-btn-item" onclick="shareVia('email')">
+        <div class="share-icon" style="background:rgba(10,132,255,.15)">📧</div>
+        <div class="share-btn-label">이메일</div>
+      </div>
+      <div class="share-btn-item" onclick="shareVia('pdf')">
+        <div class="share-icon" style="background:rgba(255,69,58,.12)">📄</div>
+        <div class="share-btn-label">PDF·iCloud</div>
+      </div>
+      <div class="share-btn-item" onclick="shareVia('native')" id="nativeShareBtn" style="display:none">
+        <div class="share-icon" style="background:rgba(48,209,88,.12)">↗</div>
+        <div class="share-btn-label">공유 메뉴</div>
+      </div>
+    </div>
+    <div class="sheet-divider"></div>
+    <div class="sheet-form">
+      <div class="field">
+        <label>이메일 공유 — 수신자</label>
+        <input type="email" id="shareEmailInput" placeholder="team@company.com">
+      </div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeShare()">취소</button>
+      <button class="btn btn-primary" style="flex:2" onclick="shareVia('email-direct')">📧 이메일로 공유</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── EMAIL MODAL ── -->
+<div class="modal-overlay" id="emailModal" onclick="if(event.target===this)closeEmail()">
+  <div class="modal">
+    <div class="modal-title">이메일 발송</div>
+    <div class="modal-sub">액션 아이템과 결정 사항을 정리해서 발송합니다</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="field">
+        <label>수신자 (쉼표로 구분)</label>
+        <input type="text" id="emailTo" placeholder="a@company.com, b@company.com">
+      </div>
+      <div class="field">
+        <label>추가 메모 (선택)</label>
+        <textarea id="emailNote" placeholder="추가로 공유할 내용"></textarea>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeEmail()">취소</button>
+      <button class="btn btn-primary" onclick="sendEmail()">이메일 열기</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════
+//   STATE
+// ═══════════════════════════════════════════
+const STORE_KEY = 'ai_meeting_recorder_v2';
+const QUEUE_KEY = 'ai_meeting_queue_v2';
+const SPEAKER_COLORS = ['#0a84ff','#30d158','#ff9f0a','#bf5af2','#ff453a','#32ade6'];
+
+let mediaRecorder = null, audioChunks = [], recInterval = null, recSecs = 0;
+let isRecording = false, audioBlob = null, uploadedFile = null, logoDataUrl = null;
+let waveAnim = null, generatedData = null;
+let isOnline = navigator.onLine;
+let toastTimer = null;
+
+// ═══════════════════════════════════════════
+//   SERVICE WORKER REGISTRATION
+// ═══════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').then(reg => {
+    console.log('[SW] Registered', reg.scope);
+  }).catch(err => console.warn('[SW] Registration failed', err));
+
+  // Listen for messages from SW
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data?.type === 'PROCESS_QUEUE') processQueue();
+  });
+}
+
+// ═══════════════════════════════════════════
+//   ONLINE / OFFLINE
+// ═══════════════════════════════════════════
+function updateOnlineStatus() {
+  isOnline = navigator.onLine;
+  const pill = document.getElementById('onlinePill');
+  const dot  = document.getElementById('onlineDot');
+  const txt  = document.getElementById('onlineText');
+  const q    = getQueue();
+
+  if (isOnline) {
+    pill.className = 'online-pill online';
+    dot.className  = 'status-dot done';
+    txt.textContent = '온라인';
+    // Notify SW
+    navigator.serviceWorker?.controller?.postMessage({ type: 'ONLINE_STATUS_CHANGE', online: true });
+    // Auto-process queue
+    if (q.length > 0) {
+      setTimeout(processQueue, 1500);
+      toast(`📶 온라인 복귀 — 대기 녹음 ${q.length}건 처리 시작`);
+    }
+  } else {
+    const qlen = q.length;
+    pill.className = qlen > 0 ? 'online-pill offline queued' : 'online-pill offline';
+    dot.className  = 'status-dot queued';
+    txt.textContent = qlen > 0 ? `오프라인 (${qlen}건 대기)` : '오프라인';
+    toast('📴 오프라인 — 녹음은 계속 가능합니다');
+  }
+  renderQueueBadge();
+}
+
+window.addEventListener('online',  updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+
+// ═══════════════════════════════════════════
+//   OFFLINE QUEUE
+// ═══════════════════════════════════════════
+function getQueue() {
+  try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch { return []; }
+}
+function saveQueue(q) {
+  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch {}
+}
+function addToQueue(blobDataUrl, meta) {
+  const q = getQueue();
+  q.push({ id: Date.now(), blobDataUrl, meta, queued: new Date().toISOString() });
+  saveQueue(q);
+  renderQueueBadge();
+}
+function removeFromQueue(id) {
+  const q = getQueue().filter(i => i.id !== id);
+  saveQueue(q);
+  renderQueueBadge();
+}
+function renderQueueBadge() {
+  const q = getQueue();
+  const sec = document.getElementById('queueSection');
+  const cnt = document.getElementById('queueCount');
+  sec.style.display = q.length > 0 ? 'block' : 'none';
+  if (cnt) cnt.textContent = q.length;
+}
+
+async function processQueue() {
+  if (!isOnline) return;
+  const q = getQueue();
+  if (q.length === 0) return;
+
+  setStatus('live', `대기 ${q.length}건 처리 중`);
+  let done = 0;
+
+  for (const item of q) {
+    try {
+      toast(`처리 중 (${done + 1}/${q.length})…`);
+      // Rebuild blob from data URL
+      const res = await fetch(item.blobDataUrl);
+      const blob = await res.blob();
+
+      const { transcript, speakers } = await transcribeWithSpeakers(blob);
+      const parsed = await analyze(transcript, speakers, item.meta?.location || '');
+
+      // Auto-fill fields from first item
+      if (done === 0) {
+        if (parsed.title)     document.getElementById('meetingTitle').value     = parsed.title;
+        if (parsed.date)      document.getElementById('meetingDate').value      = parsed.date;
+        if (parsed.attendees) document.getElementById('meetingAttendees').value = parsed.attendees;
+        if (parsed.location)  document.getElementById('locationInput').value   = parsed.location;
+        generatedData = { ...parsed, transcript, speakers };
+        renderDoc(parsed, speakers);
+        saveHistory(parsed);
+        switchTab('result');
+      }
+      removeFromQueue(item.id);
+      done++;
+    } catch (err) {
+      console.error('[Queue] Failed to process item', item.id, err);
+      break; // Stop if API call fails (maybe still offline)
+    }
+  }
+
+  if (done > 0) {
+    toast(`✓ 오프라인 대기 ${done}건 처리 완료`);
+    setStatus('done', '완료');
+  }
+  renderQueueBadge();
+  updateOnlineStatus();
+}
+
+// ═══════════════════════════════════════════
+//   NAV / TABS
+// ═══════════════════════════════════════════
+const VIEWS = ['record', 'result', 'history'];
+
+function switchTab(name, tabEl) {
+  // Mobile tab bar
+  document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+  if (tabEl) tabEl.classList.add('active');
+  else {
+    // Find tab by index
+    const idx = VIEWS.indexOf(name);
+    document.querySelectorAll('.tab-item')[idx]?.classList.add('active');
+  }
+
+  VIEWS.forEach(v => {
+    const el = document.getElementById(`view-${v}`);
+    if (el) el.classList.toggle('active', v === name);
+  });
+
+  if (name === 'history') renderHistory();
+}
+
+function desktopTab(name, el) {
+  document.querySelectorAll('.desktop-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+
+  const result  = document.getElementById('view-result');
+  const history = document.getElementById('view-history');
+
+  if (name === 'result') {
+    result.style.display  = '';
+    history.style.display = 'none';
+  } else {
+    result.style.display  = 'none';
+    history.style.display = 'flex';
+    renderHistory();
+  }
+}
+
+// ═══════════════════════════════════════════
+//   LOCATION
+// ═══════════════════════════════════════════
+async function getLocation() {
+  const btn = document.getElementById('locBtn');
+  btn.disabled = true; btn.textContent = '확인 중…';
+  if (!navigator.geolocation) { toast('위치 서비스 미지원'); btn.disabled = false; btn.textContent = '📍 현재위치'; return; }
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const { latitude: lat, longitude: lng } = pos.coords;
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ko`);
+      const d = await r.json(); const a = d.address;
+      let loc = '';
+      if (a.building) loc += a.building + ' ';
+      if (a.road)     loc += a.road + ' ';
+      if (a.suburb)   loc += a.suburb + ' ';
+      if (a.city || a.town) loc += (a.city || a.town);
+      document.getElementById('locationInput').value = loc.trim() || d.display_name;
+      toast('📍 위치 자동 입력 완료');
+    } catch { document.getElementById('locationInput').value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`; }
+    btn.disabled = false; btn.textContent = '📍 현재위치';
+  }, () => { toast('위치 권한 필요'); btn.disabled = false; btn.textContent = '📍 현재위치'; }, { timeout: 8000 });
+}
+
+// ═══════════════════════════════════════════
+//   LOGO
+// ═══════════════════════════════════════════
+function handleLogo(f) {
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    logoDataUrl = ev.target.result;
+    document.getElementById('logoThumb').innerHTML = `<img src="${logoDataUrl}" alt="logo">`;
+    document.getElementById('docLogo').src = logoDataUrl;
+    document.getElementById('docLogo').style.display = 'block';
+    toast('✓ 로고 업로드 완료');
+  };
+  r.readAsDataURL(f);
+}
+
+// ═══════════════════════════════════════════
+//   RECORDING
+// ═══════════════════════════════════════════
+async function toggleRecord() {
+  if (isRecording) { stopRecord(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1 } });
+    const mime = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'].find(t => MediaRecorder.isTypeSupported(t)) || 'audio/webm';
+    mediaRecorder = new MediaRecorder(stream, { mimeType: mime });
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      audioBlob = new Blob(audioChunks, { type: mime });
+      uploadedFile = null; removeFile(true);
+      setStatus('done', '녹음 완료'); toast(`✓ 녹음 완료 (${fmt(recSecs)})`);
+    };
+    mediaRecorder.start(200);
+    isRecording = true; recSecs = 0;
+
+    // Ring animation
+    const circumference = 2 * Math.PI * 65;
+    recInterval = setInterval(() => {
+      recSecs++;
+      document.getElementById('recTime').textContent = fmt(recSecs);
+      // Ring fills up to max 60 min
+      const pct = Math.min(recSecs / 3600, 1);
+      document.getElementById('recRingFill').style.strokeDashoffset = circumference * (1 - pct);
+    }, 1000);
+
+    waveAnim = setInterval(() => {
+      document.querySelectorAll('.wbar').forEach(b => {
+        b.style.height = (4 + Math.random() * 22) + 'px';
+        b.style.transition = 'height 0.08s ease';
+      });
+    }, 90);
+
+    document.getElementById('recBtn').classList.add('active');
+    document.getElementById('recBtn').textContent = '⏹';
+    document.getElementById('recTime').classList.add('live');
+    document.getElementById('waveform').classList.add('live');
+    document.getElementById('recLabel').textContent = '탭하여 중지';
+    setStatus('live', '녹음 중');
+  } catch (e) { toast('마이크 권한이 필요합니다'); }
+}
+
+function stopRecord() {
+  if (!isRecording) return;
+  mediaRecorder.stop(); mediaRecorder.stream.getTracks().forEach(t => t.stop());
+  isRecording = false; clearInterval(recInterval); clearInterval(waveAnim);
+  // Reset wave
+  const bars = document.querySelectorAll('.wbar');
+  [8,14,10,18,12,20,10,16,8,14,18,10].forEach((h,i) => { if (bars[i]) { bars[i].style.height = h+'px'; bars[i].style.transition = 'height .3s ease'; } });
+  document.getElementById('recBtn').classList.remove('active');
+  document.getElementById('recBtn').textContent = '🎙️';
+  document.getElementById('recTime').classList.remove('live');
+  document.getElementById('waveform').classList.remove('live');
+  document.getElementById('recRingFill').style.strokeDashoffset = 408;
+  document.getElementById('recLabel').textContent = '탭하여 녹음 시작';
+}
+
+function fmt(s) { return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0'); }
+
+// ═══════════════════════════════════════════
+//   FILE HANDLING
+// ═══════════════════════════════════════════
+function handleFile(f) {
+  if (!f) return;
+  uploadedFile = f; audioBlob = null;
+  document.getElementById('fileBadge').style.display = 'flex';
+  document.getElementById('fileName').textContent = f.name;
+  document.getElementById('uploadZone').style.display = 'none';
+  setStatus('done', '파일 준비'); toast('✓ 파일 로드 완료');
+}
+function removeFile(silent) {
+  uploadedFile = null;
+  document.getElementById('fileBadge').style.display = 'none';
+  document.getElementById('uploadZone').style.display = 'block';
+  document.getElementById('audioFile').value = '';
+  if (!silent) setStatus('', '대기 중');
+}
+function handleDrop(e) {
+  e.preventDefault(); document.getElementById('uploadZone').classList.remove('drag');
+  const f = e.dataTransfer.files[0]; if (f) handleFile(f);
+}
+
+// ═══════════════════════════════════════════
+//   GENERATE
+// ═══════════════════════════════════════════
+async function generate() {
+  const src = audioBlob || uploadedFile;
+  if (!src) { toast('녹음하거나 파일을 업로드해주세요'); return; }
+  const location = document.getElementById('locationInput').value.trim();
+
+  // OFFLINE: queue it
+  if (!isOnline) {
+    const r = new FileReader();
+    r.onload = ev => {
+      addToQueue(ev.target.result, { location });
+      toast('📴 오프라인 — 온라인 복귀 시 자동 처리됩니다');
+      setStatus('queued', '대기 중');
+      renderQueueBadge();
+      updateOnlineStatus();
+    };
+    r.readAsDataURL(src);
+    return;
+  }
+
+  setLoading(true); setStatus('', 'AI 처리 중…');
+  try {
+    setProgress('화자 분리 및 음성 변환 중…', 15);
+    const { transcript, speakers } = await transcribeWithSpeakers(src);
+
+    const prev = document.getElementById('transcriptPreview');
+    prev.textContent = (transcript || '').slice(0, 300) + (transcript?.length > 300 ? '…' : '');
+    prev.style.display = 'block';
+
+    setProgress('AI 분석 및 회의록 작성 중…', 60);
+    const parsed = await analyze(transcript, speakers, location);
+
+    generatedData = { ...parsed, transcript, speakers };
+    setProgress('완료!', 100);
+
+    // Auto-fill fields
+    if (parsed.title)     document.getElementById('meetingTitle').value     = parsed.title;
+    if (parsed.date)      document.getElementById('meetingDate').value      = parsed.date;
+    if (parsed.attendees) document.getElementById('meetingAttendees').value = parsed.attendees;
+    if (parsed.location && !location) document.getElementById('locationInput').value = parsed.location;
+
+    renderDoc(parsed, speakers);
+    saveHistory(parsed);
+
+    // Switch to result view
+    switchTab('result');
+    document.querySelectorAll('.tab-item')[1]?.classList.add('active');
+    document.querySelectorAll('.tab-item')[0]?.classList.remove('active');
+
+    // Show desktop action buttons
+    showDesktopActions(true);
+
+    setTimeout(() => { setLoading(false); setStatus('done', '완료'); }, 500);
+    toast('✓ 회의록 생성 완료');
+  } catch (e) {
+    console.error(e); toast('오류: ' + e.message);
+    setLoading(false); setStatus('', '대기 중');
+  }
+}
+
+// ═══════════════════════════════════════════
+//   API: TRANSCRIBE WITH SPEAKERS
+// ═══════════════════════════════════════════
+async function transcribeWithSpeakers(blob) {
+  const b64 = await toBase64(blob);
+  const mime = blob.type || 'audio/webm';
+  const prompt = `이 오디오를 분석하여 화자 분리와 전사를 수행하고 JSON만 응답하세요.
+
+{
+  "transcript": "전체 대화 텍스트",
+  "speakers": [
+    {"name": "화자 1", "lines": ["발언1", "발언2"]},
+    {"name": "화자 2", "lines": ["발언1"]}
+  ]
+}
+
+화자 구분이 어려우면 speakers는 빈 배열로 반환. JSON만 출력.`;
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514', max_tokens: 1000,
+      messages: [{ role: 'user', content: [
+        { type: 'document', source: { type: 'base64', media_type: mime, data: b64.split(',')[1] } },
+        { type: 'text', text: prompt }
+      ]}]
+    })
+  });
+  if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e.error?.message || '전사 오류 ' + resp.status); }
+  const d = await resp.json();
+  const txt = d.content.map(b => b.text || '').join('');
+  try {
+    const p = JSON.parse(txt.replace(/```json|```/g, '').trim());
+    return { transcript: p.transcript || txt, speakers: p.speakers || [] };
+  } catch { return { transcript: txt, speakers: [] }; }
+}
+
+// ═══════════════════════════════════════════
+//   API: ANALYZE
+// ═══════════════════════════════════════════
+async function analyze(transcript, speakers, location) {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric', weekday:'short', hour:'2-digit', minute:'2-digit' });
+  const speakerNames = (speakers || []).map(s => s.name).join(', ');
+
+  const prompt = `회의 전사 내용을 분석하여 JSON으로만 응답하세요.
+
+현재 일시: ${dateStr}
+현재 장소: ${location || '미기재'}
+감지된 화자: ${speakerNames || '미감지'}
+
+전사:
+${transcript}
+
+{
+  "title": "회의 제목",
+  "date": "일시",
+  "location": "장소",
+  "attendees": "참석자",
+  "issues": [{"title":"쟁점","content":"내용"}],
+  "decisions": ["결정사항"],
+  "actions": [{"task":"할일","owner":"담당자","due":"기한"}],
+  "summary": "요약 3~5문장",
+  "suggestions": [
+    {"tag":"효율화","content":"제안"},
+    {"tag":"후속조치","content":"제안"},
+    {"tag":"리스크","content":"주의사항"},
+    {"tag":"다음회의","content":"추천안건"}
+  ]
+}`;
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] })
+  });
+  if (!resp.ok) throw new Error('분석 오류 ' + resp.status);
+  const d = await resp.json();
+  const txt = d.content.map(b => b.text || '').join('');
+  return JSON.parse(txt.replace(/```json|```/g, '').trim());
+}
+
+function toBase64(blob) {
+  return new Promise((res, rej) => {
+    const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error('읽기 실패'));
+    r.readAsDataURL(blob);
+  });
+}
+
+// ═══════════════════════════════════════════
+//   RENDER DOC
+// ═══════════════════════════════════════════
+function renderDoc(d, speakers) {
+  const now = new Date();
+  document.getElementById('docTitle').textContent    = d.title || '회의록';
+  document.getElementById('docDate').textContent     = d.date || '—';
+  document.getElementById('docLocation').textContent = d.location || document.getElementById('locationInput').value || '—';
+  document.getElementById('docAttendees').textContent= d.attendees || '—';
+  document.getElementById('docCreated').textContent  = now.toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric' });
+  document.getElementById('docFooterDate').textContent = now.toLocaleDateString('ko-KR');
+
+  // Speakers
+  const sl = document.getElementById('speakerList');
+  const ss = document.getElementById('speakerSection');
+  sl.innerHTML = '';
+  if (speakers && speakers.length > 0) {
+    ss.style.display = 'block';
+    speakers.forEach((sp, i) => {
+      const color = SPEAKER_COLORS[i % SPEAKER_COLORS.length];
+      (sp.lines || []).slice(0, 2).forEach((line, li) => {
+        const div = document.createElement('div');
+        div.className = 'speaker-turn';
+        div.style.animationDelay = (li * .06) + 's';
+        div.innerHTML = `
+          <div class="speaker-avatar" style="background:${color}">${sp.name.slice(-1)}</div>
+          <div style="flex:1">
+            ${li === 0 ? `<div class="speaker-name" style="color:${color}">${esc(sp.name)}</div>` : ''}
+            <div class="speaker-quote">${esc(line)}</div>
+          </div>`;
+        sl.appendChild(div);
+      });
+    });
+  } else { ss.style.display = 'none'; }
+
+  // Issues
+  const il = document.getElementById('issuesList'); il.innerHTML = '';
+  (d.issues || []).forEach((iss, i) => {
+    const el = document.createElement('div'); el.className = 'issue-card'; el.style.animationDelay = (i*.05)+'s';
+    el.innerHTML = `<div class="issue-title">${esc(iss.title)}</div><div class="issue-body">${esc(iss.content)}</div>`;
+    il.appendChild(el);
+  });
+
+  // Decisions
+  const dl = document.getElementById('decisionsList'); dl.innerHTML = '';
+  (d.decisions || []).forEach((dec, i) => {
+    const li = document.createElement('li'); li.className = 'decision-item'; li.style.animationDelay = (i*.04)+'s';
+    li.innerHTML = `<div class="dec-dot"></div><span>${esc(dec)}</span>`;
+    dl.appendChild(li);
+  });
+
+  // Actions
+  const al = document.getElementById('actionsList'); al.innerHTML = '';
+  (d.actions || []).forEach((a, i) => {
+    const el = document.createElement('div'); el.className = 'action-card'; el.style.animationDelay = (i*.05)+'s';
+    el.innerHTML = `<div class="action-task">${esc(a.task)}</div><div class="action-meta">담당: ${esc(a.owner)} · 기한: ${esc(a.due)}</div>`;
+    al.appendChild(el);
+  });
+
+  // Summary
+  document.getElementById('summaryContent').textContent = d.summary || '';
+
+  // Suggestions
+  const sg = document.getElementById('suggestGrid'); sg.innerHTML = '';
+  if (d.suggestions && d.suggestions.length) {
+    d.suggestions.forEach((s, i) => {
+      const el = document.createElement('div'); el.className = 'suggest-card'; el.style.animationDelay = (i*.07)+'s';
+      el.innerHTML = `<div class="suggest-tag">${esc(s.tag)}</div><div class="suggest-body">${esc(s.content)}</div>`;
+      sg.appendChild(el);
+    });
+    document.getElementById('suggestSection').style.display = 'block';
+  }
+
+  document.getElementById('emptyState').style.display   = 'none';
+  document.getElementById('minutesContent').style.display = 'block';
+  if (navigator.share) document.getElementById('nativeShareBtn').style.display = 'flex';
+}
+
+// ═══════════════════════════════════════════
+//   HISTORY
+// ═══════════════════════════════════════════
+function saveHistory(d) {
+  let h = getHistory();
+  h.unshift({ id: Date.now(), title: d.title || '회의록', date: d.date || new Date().toLocaleDateString('ko-KR'), data: d });
+  if (h.length > 60) h = h.slice(0, 60);
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(h)); } catch {}
+}
+function getHistory() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); } catch { return []; }
+}
+function renderHistory() {
+  const h = getHistory();
+  const list = document.getElementById('historyList');
+  const empty = document.getElementById('historyEmpty');
+  list.innerHTML = '';
+  if (!h.length) { empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  h.forEach((item, i) => {
+    const el = document.createElement('div');
+    el.className = 'history-item'; el.style.animationDelay = (i * .04) + 's';
+    el.innerHTML = `
+      <div class="history-icon">📄</div>
+      <div style="flex:1">
+        <div class="history-title">${esc(item.title)}</div>
+        <div class="history-meta">${esc(item.date)}</div>
+      </div>
+      <div class="history-del" onclick="delHistory(${item.id},event)">🗑</div>`;
+    el.onclick = () => loadHistory(item);
+    list.appendChild(el);
+  });
+}
+function loadHistory(item) {
+  generatedData = item.data;
+  renderDoc(item.data, item.data.speakers || []);
+  switchTab('result');
+  document.querySelectorAll('.tab-item').forEach((t,i) => t.classList.toggle('active', i === 1));
+  showDesktopActions(true);
+  toast('✓ 회의록 불러오기 완료');
+}
+function delHistory(id, e) {
+  e.stopPropagation();
+  const h = getHistory().filter(i => i.id !== id);
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(h)); } catch {}
+  renderHistory(); toast('삭제되었습니다');
+}
+
+// ═══════════════════════════════════════════
+//   SHARE / EMAIL
+// ═══════════════════════════════════════════
+function openShare() {
+  if (!generatedData) { toast('먼저 회의록을 생성해주세요'); return; }
+  document.getElementById('shareSheet').classList.add('open');
+}
+function closeShare() { document.getElementById('shareSheet').classList.remove('open'); }
+
+function shareVia(type) {
+  const d = generatedData; if (!d) return;
+  if (type === 'copy')  { copyText(); closeShare(); return; }
+  if (type === 'pdf')   { downloadPDF(); closeShare(); return; }
+  if (type === 'native') {
+    const text = buildTextBody(d);
+    navigator.share({ title: `[회의록] ${d.title}`, text }).catch(() => {});
+    closeShare(); return;
+  }
+  if (type === 'email' || type === 'email-direct') {
+    const to = document.getElementById('shareEmailInput').value;
+    sendEmailDirect(d, to);
+    closeShare();
+  }
+}
+
+function openEmail() {
+  if (!generatedData) { toast('먼저 회의록을 생성해주세요'); return; }
+  document.getElementById('emailModal').classList.add('open');
+}
+function closeEmail() { document.getElementById('emailModal').classList.remove('open'); }
+function sendEmail() {
+  const d = generatedData;
+  const to   = document.getElementById('emailTo').value;
+  const note = document.getElementById('emailNote').value;
+  sendEmailDirect(d, to, note);
+  closeEmail();
+}
+function sendEmailDirect(d, to, note) {
+  const subject = `[회의록] ${d.title || '회의'} — ${d.date || ''}`;
+  let body = note ? `▶ 메모\n${note}\n\n` : '';
+  body += buildTextBody(d);
+  window.location.href = `mailto:${encodeURIComponent(to || '')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  toast('✓ 이메일 클라이언트 열기');
+}
+
+function buildTextBody(d) {
+  let t = `[회의록] ${d.title || ''}\n일시: ${d.date||'—'} | 장소: ${d.location||'—'} | 참석자: ${d.attendees||'—'}\n\n`;
+  if (d.speakers?.length) {
+    t += `▶ 화자별 발언\n`;
+    d.speakers.forEach(sp => { t += `${sp.name}:\n` + (sp.lines||[]).map(l=>`  "${l}"`).join('\n') + '\n'; });
+    t += '\n';
+  }
+  t += `▶ 결정 사항\n` + (d.decisions||[]).map((dec,i)=>`${i+1}. ${dec}`).join('\n') + '\n\n';
+  t += `▶ 액션 아이템\n` + (d.actions||[]).map(a=>`• ${a.task} (담당: ${a.owner}, 기한: ${a.due})`).join('\n') + '\n\n';
+  t += `▶ 요약\n${d.summary||''}\n\n---\n🎙️ AI Meeting Recorder`;
+  return t;
+}
+
+function copyText() {
+  if (!generatedData) { toast('먼저 회의록을 생성해주세요'); return; }
+  navigator.clipboard.writeText(buildTextBody(generatedData)).then(() => toast('✓ 클립보드에 복사됨'));
+}
+
+// ═══════════════════════════════════════════
+//   PDF DOWNLOAD (→ iCloud Drive via Safari)
+// ═══════════════════════════════════════════
+function downloadPDF() {
+  if (!generatedData) return;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+  const pw = 210, ph = 297, mg = 22, cw = pw - mg * 2;
+  let y = mg; const d = generatedData; const title = d.title || '회의록';
+
+  if (logoDataUrl) {
+    try { doc.addImage(logoDataUrl, 'PNG', mg, y, 26, 13, '', 'FAST'); } catch {}
+    doc.setFontSize(19); doc.setFont('helvetica', 'bold'); doc.setTextColor(237, 237, 238);
+    doc.text(title, mg + 32, y + 9); y += 20;
+  } else {
+    doc.setFontSize(20); doc.setFont('helvetica', 'bold'); doc.setTextColor(237, 237, 238);
+    doc.text(title, mg, y + 9); y += 16;
+  }
+  doc.setDrawColor(34, 34, 38); doc.setLineWidth(.4); doc.line(mg, y, pw-mg, y); y += 7;
+
+  const metas = [['일시', d.date||'—'], ['장소', d.location||document.getElementById('locationInput').value||'—'], ['참석자', d.attendees||'—'], ['작성일', new Date().toLocaleDateString('ko-KR')]];
+  metas.forEach(([k,v], i) => {
+    const col = i%2===0 ? mg : mg+cw/2+4;
+    if (i===2) y += 8;
+    doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(85,85,95);
+    doc.text(k, col, y);
+    doc.setFont('helvetica','normal'); doc.setTextColor(180,180,185); doc.setFontSize(10);
+    const ls = doc.splitTextToSize(v, cw/2-20);
+    doc.text(ls, col+16, y);
+  });
+  y += 13; doc.setDrawColor(34,34,38); doc.line(mg, y, pw-mg, y); y += 8;
+
+  function sec(heading, draw) {
+    if (y > ph-40) { doc.addPage(); y = mg; }
+    doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(10,132,255);
+    doc.text(heading, mg, y);
+    const lw = doc.getTextWidth(heading)+3;
+    doc.setDrawColor(34,34,38); doc.setLineWidth(.2); doc.line(mg+lw, y-1, pw-mg, y-1);
+    y += 6; doc.setFont('helvetica','normal'); doc.setTextColor(143,143,151); doc.setFontSize(10);
+    draw(); y += 6;
+  }
+
+  if (d.speakers?.length) {
+    sec('화자별 발언', () => {
+      d.speakers.forEach(sp => {
+        if (y > ph-20) { doc.addPage(); y = mg; }
+        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(237,237,238);
+        doc.text(sp.name+':', mg, y); y += 5.5;
+        doc.setFont('helvetica','italic'); doc.setTextColor(143,143,151);
+        (sp.lines||[]).slice(0,2).forEach(l => {
+          const ls = doc.splitTextToSize(`"${l}"`, cw-8);
+          ls.forEach(ll => { if (y>ph-20){doc.addPage();y=mg;} doc.text(ll, mg+4, y); y += 5.2; });
+        }); y += 2;
+      });
+    });
+  }
+
+  sec('주요 쟁점', () => {
+    (d.issues||[]).forEach(iss => {
+      if (y>ph-20){doc.addPage();y=mg;}
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(237,237,238);
+      doc.text('• '+iss.title, mg, y); y += 5.5;
+      doc.setFont('helvetica','normal'); doc.setTextColor(143,143,151);
+      const ls = doc.splitTextToSize('  '+iss.content, cw-6);
+      ls.forEach(l=>{if(y>ph-20){doc.addPage();y=mg;}doc.text(l,mg+4,y);y+=5.2;}); y+=2;
+    });
+  });
+
+  sec('결정 사항', () => {
+    (d.decisions||[]).forEach((dec,i) => {
+      if (y>ph-20){doc.addPage();y=mg;}
+      const ls = doc.splitTextToSize((i+1)+'. '+dec, cw);
+      ls.forEach(l=>{doc.text(l,mg,y);y+=5.5;});
+    });
+  });
+
+  sec('액션 아이템', () => {
+    (d.actions||[]).forEach(a => {
+      if (y>ph-22){doc.addPage();y=mg;}
+      doc.setFillColor(26,26,29); doc.rect(mg, y-3.5, cw, 12.5, 'F');
+      doc.setDrawColor(10,132,255); doc.setLineWidth(1.5); doc.line(mg, y-3.5, mg, y+9);
+      doc.setLineWidth(.2);
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(237,237,238);
+      doc.text(a.task, mg+4, y+1.5);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(10,132,255);
+      doc.text(`담당: ${a.owner}  ·  기한: ${a.due}`, mg+4, y+7.5);
+      y += 16;
+    });
+  });
+
+  sec('회의 요약', () => {
+    const ls = doc.splitTextToSize(d.summary||'', cw);
+    ls.forEach(l=>{if(y>ph-20){doc.addPage();y=mg;}doc.text(l,mg,y);y+=5.5;});
+  });
+
+  const tp = doc.internal.getNumberOfPages();
+  for (let i=1; i<=tp; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(85,85,95);
+    doc.text('🎙️ AI Meeting Recorder  ·  '+title, mg, ph-9);
+    doc.text(i+'/'+tp, pw-mg, ph-9, { align: 'right' });
+  }
+
+  const fname = '회의록_' + title.replace(/[^a-zA-Z0-9가-힣]/g, '_') + '.pdf';
+  doc.save(fname);
+  toast('✓ PDF 저장 완료 — iCloud Drive에서 확인하세요');
+}
+
+// ═══════════════════════════════════════════
+//   UI HELPERS
+// ═══════════════════════════════════════════
+function setLoading(on) {
+  document.getElementById('genBtn').disabled = on;
+  document.getElementById('genSpinner').style.display = on ? 'inline-flex' : 'none';
+  document.getElementById('genText').textContent = on ? '처리 중…' : '✦ 회의록 생성';
+  document.getElementById('progressWrap').style.display = on ? 'block' : 'none';
+  if (!on) { document.getElementById('progressFill').style.width = '0%'; document.getElementById('progressLabel').textContent = ''; }
+}
+function setProgress(label, pct) {
+  document.getElementById('progressLabel').textContent = label;
+  document.getElementById('progressFill').style.width = pct + '%';
+}
+function setStatus(type, text) {
+  const dot = document.getElementById('statusDot');
+  dot.className = 'status-dot' + (type ? ' ' + type : '');
+  document.getElementById('statusText').textContent = text;
+}
+function showDesktopActions(show) {
+  const ids = ['dShareBtn','dCopyBtn','dPdfBtn'];
+  ids.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = show ? 'inline-flex' : 'none'; });
+  const wrap = document.getElementById('desktopNavActions');
+  if (wrap) wrap.style.display = show ? 'flex' : 'none';
+}
+function toast(msg) {
+  clearTimeout(toastTimer);
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show';
+  toastTimer = setTimeout(() => t.className = 'toast', 3000);
+}
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ═══════════════════════════════════════════
+//   INIT
+// ═══════════════════════════════════════════
+window.addEventListener('load', () => {
+  updateOnlineStatus();
+  renderQueueBadge();
+
+  // Auto-detect location silently
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(async pos => {
+      const { latitude: lat, longitude: lng } = pos.coords;
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ko`);
+        const d = await r.json(); const a = d.address;
+        let loc = '';
+        if (a.building) loc += a.building + ' ';
+        if (a.road)     loc += a.road + ' ';
+        if (a.suburb)   loc += a.suburb + ' ';
+        if (a.city || a.town) loc += (a.city || a.town);
+        const inp = document.getElementById('locationInput');
+        if (!inp.value) inp.value = loc.trim() || d.display_name;
+      } catch {}
+    }, () => {}, { timeout: 6000 });
+  }
+
+  // Desktop: always show record view + result side by side
+  if (window.innerWidth >= 1024) {
+    document.getElementById('view-record').classList.add('active');
+    document.getElementById('view-result').classList.add('active');
+    showDesktopActions(false);
+  }
+});
+</script>
+</body>
+</html>
