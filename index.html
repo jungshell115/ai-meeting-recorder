@@ -1326,7 +1326,8 @@ body {
     </div>
 
     <button class="btn btn-primary btn-full" onclick="saveSetup()">시작하기</button>
-    <button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="skipSetup()">나중에 설정</button>
+    <button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="restoreFromGist()">🔄 다른 기기에서 복원하기</button>
+    <button class="btn btn-ghost btn-full" style="margin-top:4px;font-size:12px;color:var(--text3)" onclick="skipSetup()">나중에 설정</button>
   </div>
 </div>
 
@@ -1405,14 +1406,21 @@ function getGhToken(){return getKeys().gh||'';}
 
 // ─── Setup wizard ───
 function checkFirstRun(){const k=getKeys();if(!k.groq&&!k.setupDone){document.getElementById('setupOverlay').classList.remove('hidden');}}
-function saveSetup(){
+async function saveSetup(){
   const groq=document.getElementById('setupGroqKey').value.trim();
   const gh=document.getElementById('setupGhToken').value.trim();
   if(!groq){toast('Groq API 키를 입력해주세요');return;}
-  const k=getKeys();if(groq)k.groq=groq;if(gh)k.gh=gh;k.setupDone=true;saveKeys(k);
+  const k=getKeys();k.groq=groq;if(gh)k.gh=gh;k.setupDone=true;saveKeys(k);
   document.getElementById('setupOverlay').classList.add('hidden');
-  toast('✓ 설정 완료! 이제 녹음을 시작하세요');
-  if(gh)initGist();
+  toast('✓ 설정 저장 중…');
+  // Gist 연결 후 즉시 키 포함 동기화 — 이후 다른 기기에서 자동 복원됨
+  if(gh){
+    await initGist();
+    await syncToGist();
+    toast('✓ 설정 완료 & Gist 동기화됨 — 이제 어느 기기에서든 자동 적용돼요');
+  } else {
+    toast('✓ 설정 완료! 이제 녹음을 시작하세요');
+  }
 }
 function skipSetup(){const k=getKeys();k.setupDone=true;saveKeys(k);document.getElementById('setupOverlay').classList.add('hidden');toast('설정은 ⚙️ 에서 언제든 할 수 있어요');}
 
@@ -1425,14 +1433,14 @@ function openSettings(){
   updateKeyStatuses();document.getElementById('settingsModal').classList.add('open');
 }
 function closeSettings(){document.getElementById('settingsModal').classList.remove('open');}
-function saveSettings(){
+async function saveSettings(){
   const k=getKeys();
   const gv=document.getElementById('settingGroqKey').value.trim();
   const ghv=document.getElementById('settingGhToken').value.trim();
   if(gv&&!gv.startsWith('••'))k.groq=gv;
   if(ghv&&!ghv.startsWith('••'))k.gh=ghv;
   saveKeys(k);updateKeyStatuses();closeSettings();toast('✓ 설정 저장됨');
-  if(k.gh)initGist();
+  if(k.gh){await initGist();await syncToGist();}
 }
 document.addEventListener('focus',e=>{
   if((e.target.id==='settingGroqKey'||e.target.id==='settingGhToken')&&e.target.dataset.masked==='true'){e.target.value='';e.target.dataset.masked='false';}
@@ -1605,9 +1613,19 @@ async function syncToGist(){
 }
 async function loadFromGist(){
   const token=getGhToken();if(!token){toast('GitHub 토큰을 먼저 설정해주세요');return;}
-  const gistId=localStorage.getItem(GIST_ID_KEY);if(!gistId){toast('먼저 Gist를 연결해주세요');return;}
   setGistBadge('syncing','불러오는 중…');
   try{
+    // gistId 없으면 GitHub에서 직접 검색 (새 기기 복원 핵심)
+    let gistId=localStorage.getItem(GIST_ID_KEY);
+    if(!gistId){
+      const listR=await fetch('https://api.github.com/gists?per_page=100',{headers:{Authorization:'token '+token}});
+      if(!listR.ok)throw new Error('GitHub 인증 실패');
+      const list=await listR.json();
+      const found=list.find(g=>g.files&&g.files[GIST_FILENAME]);
+      if(!found)throw new Error('저장된 Gist 없음 — 먼저 다른 기기에서 설정을 완료해주세요');
+      gistId=found.id;
+      localStorage.setItem(GIST_ID_KEY,gistId);
+    }
     const r=await fetch(`https://api.github.com/gists/${gistId}`,{headers:{Authorization:'token '+token}});
     const d=await r.json();const raw=d.files?.[GIST_FILENAME]?.content;if(!raw)throw new Error('파일 없음');
     const data=JSON.parse(raw);
@@ -1617,14 +1635,13 @@ async function loadFromGist(){
     const merged=[...remote,...local].reduce((acc,item)=>{if(!acc.find(x=>x.id===item.id))acc.push(item);return acc;},[]).sort((a,b)=>b.id-a.id).slice(0,60);
     try{localStorage.setItem(STORE_KEY,JSON.stringify(merged));}catch{}
 
-    // ② API 키 복원 (새 기기에서 자동 설정)
+    // ② API 키 복원
     if(data.keys_obf){
       const k=getKeys();
-      if(data.keys_obf.groq&&!k.groq){try{k.groq=atob(data.keys_obf.groq);}catch{}}
-      if(data.keys_obf.gh&&!k.gh){try{k.gh=atob(data.keys_obf.gh);}catch{}}
+      if(data.keys_obf.groq){try{k.groq=atob(data.keys_obf.groq);}catch{}}
+      if(data.keys_obf.gh){try{k.gh=atob(data.keys_obf.gh);}catch{}}
       k.setupDone=true;
       saveKeys(k);updateKeyStatuses();
-      // 셋업 화면 닫기
       document.getElementById('setupOverlay').classList.add('hidden');
     }
 
@@ -1635,8 +1652,8 @@ async function loadFromGist(){
       saveFavLocations(mergedLocs);
     }
 
-    setGistBadge('synced',`동기화 완료`);
-    toast(`✓ Gist에서 복원 완료 — 회의록 ${remote.length}건, 설정 및 장소 목록`);
+    setGistBadge('synced','동기화 완료');
+    toast(`✓ 복원 완료 — 회의록 ${remote.length}건, 키 및 장소 목록`);
     if(document.getElementById('view-history').style.display!=='none')renderHistory();
   }catch(e){setGistBadge('error','불러오기 실패');toast('불러오기 실패: '+e.message);}
 }
@@ -1945,23 +1962,45 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 // ═══════════════════════════════════════════
 //   INIT
 // ═══════════════════════════════════════════
+
+// 새 기기에서 복원 — 셋업 화면의 "다른 기기에서 복원" 버튼
+async function restoreFromGist(){
+  const gh=document.getElementById('setupGhToken').value.trim();
+  if(!gh){toast('GitHub Token을 먼저 입력해주세요');return;}
+  // 토큰을 임시 저장 후 복원 시도
+  const k=getKeys();k.gh=gh;saveKeys(k);
+  toast('⟳ Gist에서 설정 복원 중…');
+  await loadFromGist();
+}
+
 window.addEventListener('load',()=>{
   updateOnlineStatus();renderQueueBadge();updateKeyStatuses();
 
-  // 새 기기 자동 복원: gh 토큰은 있는데 groq 키가 없으면 Gist에서 자동으로 끌어옴
   const k=getKeys();
-  if(k.gh&&!k.groq){
-    toast('⟳ Gist에서 설정 자동 복원 중…');
-    setTimeout(()=>loadFromGist(),800);
+  if(k.gh){
+    // 토큰 있으면 Gist 연결 + 전체 설정 최신화
+    initGist();
   } else {
-    if(k.gh)initGist();
+    // 완전 새 기기 — 셋업 화면 표시
     checkFirstRun();
   }
 
-  if(navigator.geolocation){navigator.geolocation.getCurrentPosition(async pos=>{const{latitude:lat,longitude:lng}=pos.coords;try{const r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ko`);const d=await r.json();const a=d.address;let loc='';if(a.building)loc+=a.building+' ';if(a.road)loc+=a.road+' ';if(a.suburb)loc+=a.suburb+' ';if(a.city||a.town)loc+=(a.city||a.town);const inp=document.getElementById('locationInput');if(!inp.value){inp.value=loc.trim()||d.display_name;addFavLocation(loc.trim()||d.display_name);}}catch{}},()=>{},{timeout:6000});}
-  if(window.innerWidth>=1024){document.getElementById('view-record').classList.add('active');document.getElementById('view-result').classList.add('active');showDesktopActions(false);}
+  if(navigator.geolocation){navigator.geolocation.getCurrentPosition(async pos=>{
+    const{latitude:lat,longitude:lng}=pos.coords;
+    try{const r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ko`);
+      const d=await r.json();const a=d.address;let loc='';
+      if(a.building)loc+=a.building+' ';if(a.road)loc+=a.road+' ';if(a.suburb)loc+=a.suburb+' ';if(a.city||a.town)loc+=(a.city||a.town);
+      const inp=document.getElementById('locationInput');
+      if(!inp.value){inp.value=loc.trim()||d.display_name;addFavLocation(loc.trim()||d.display_name);}
+    }catch{}
+  },()=>{},{timeout:6000});}
 
-  // 바깥 클릭 시 장소 드롭다운 닫기
+  if(window.innerWidth>=1024){
+    document.getElementById('view-record').classList.add('active');
+    document.getElementById('view-result').classList.add('active');
+    showDesktopActions(false);
+  }
+
   document.addEventListener('click',e=>{
     const fav=document.getElementById('locFavorites');
     const inp=document.getElementById('locationInput');
