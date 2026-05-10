@@ -1317,6 +1317,17 @@ body {
     <div class="setup-step">
       <div class="setup-step-num">2</div>
       <div class="setup-step-text">
+        <strong>Anthropic API 키</strong> — 회의록 분석에 사용<br>
+        <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent);font-size:12px">console.anthropic.com → API Keys → Create</a>
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:12px">
+      <input type="password" id="setupAnthropicKey" placeholder="sk-ant-..." autocomplete="off">
+    </div>
+
+    <div class="setup-step">
+      <div class="setup-step-num">3</div>
+      <div class="setup-step-text">
         <strong>GitHub Token</strong> — 회의록 클라우드 저장<br>
         <a href="https://github.com/settings/tokens/new?scopes=gist&description=AI+Meeting+Recorder" target="_blank" style="color:var(--accent);font-size:12px">github.com → Settings → Tokens → New (gist 권한만)</a>
       </div>
@@ -1346,6 +1357,17 @@ body {
         <button class="btn btn-ghost" onclick="testGroqKey()">테스트</button>
       </div>
       <div class="key-status empty" id="groqKeyStatus">⬤ 미설정</div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">② Anthropic — 회의록 분석</div>
+      <div class="key-input-row">
+        <div class="field">
+          <input type="password" id="settingAnthropicKey" placeholder="sk-ant-..." autocomplete="off">
+        </div>
+        <button class="btn btn-ghost" onclick="testAnthropicKey()">테스트</button>
+      </div>
+      <div class="key-status empty" id="anthropicKeyStatus">⬤ 미설정</div>
     </div>
 
     <div class="settings-section">
@@ -1393,6 +1415,8 @@ const QUEUE_KEY   = 'ai_meeting_queue_v2';
 const KEYS_KEY    = 'ai_meeting_keys_v1';
 const GIST_ID_KEY = 'ai_meeting_gist_id';
 const SPEAKER_COLORS = ['#0a84ff','#30d158','#ff9f0a','#bf5af2','#ff453a','#32ade6'];
+const CLAUDE_API = 'https://autowrite.sti60val.workers.dev';
+function claudeHeaders(){return{'Content-Type':'application/json','x-api-key':getAnthropicKey(),'anthropic-version':'2023-06-01'};}
 
 let mediaRecorder=null,audioChunks=[],recInterval=null,recSecs=0;
 let isRecording=false,audioBlob=null,uploadedFile=null,logoDataUrl=null;
@@ -1403,52 +1427,57 @@ function getKeys(){try{return JSON.parse(localStorage.getItem(KEYS_KEY)||'{}');}
 function saveKeys(k){try{localStorage.setItem(KEYS_KEY,JSON.stringify(k));}catch{}}
 function getGroqKey(){return getKeys().groq||'';}
 function getGhToken(){return getKeys().gh||'';}
-
+function getAnthropicKey(){return getKeys().anthropic||'';}
 // ─── Setup wizard ───
-function checkFirstRun(){const k=getKeys();if(!k.groq&&!k.setupDone){document.getElementById('setupOverlay').classList.remove('hidden');}}
+function checkFirstRun(){const k=getKeys();if((!k.groq||!k.anthropic)&&!k.setupDone){document.getElementById('setupOverlay').classList.remove('hidden');}}
 async function saveSetup(){
   const groq=document.getElementById('setupGroqKey').value.trim();
+  const ant=document.getElementById('setupAnthropicKey').value.trim();
   const gh=document.getElementById('setupGhToken').value.trim();
   if(!groq){toast('Groq API 키를 입력해주세요');return;}
-  const k=getKeys();k.groq=groq;if(gh)k.gh=gh;k.setupDone=true;saveKeys(k);
+  if(!ant){toast('Anthropic API 키를 입력해주세요');return;}
+  const k=getKeys();k.groq=groq;k.anthropic=ant;if(gh)k.gh=gh;k.setupDone=true;saveKeys(k);
   document.getElementById('setupOverlay').classList.add('hidden');
   toast('✓ 설정 저장 중…');
-  // Gist 연결 후 즉시 키 포함 동기화 — 이후 다른 기기에서 자동 복원됨
-  if(gh){
-    await initGist();
-    await syncToGist();
-    toast('✓ 설정 완료 & Gist 동기화됨 — 이제 어느 기기에서든 자동 적용돼요');
-  } else {
-    toast('✓ 설정 완료! 이제 녹음을 시작하세요');
-  }
+  if(gh){await initGist();await syncToGist();toast('✓ 설정 완료 & Gist 동기화됨 — 이제 어느 기기에서든 자동 적용돼요');}
+  else{toast('✓ 설정 완료! 이제 녹음을 시작하세요');}
 }
 function skipSetup(){const k=getKeys();k.setupDone=true;saveKeys(k);document.getElementById('setupOverlay').classList.add('hidden');toast('설정은 ⚙️ 에서 언제든 할 수 있어요');}
 
 // ─── Settings modal ───
 function openSettings(){
   const k=getKeys();
-  const gi=document.getElementById('settingGroqKey'),ghi=document.getElementById('settingGhToken');
-  gi.value=k.groq?'••••••••'+k.groq.slice(-4):'';ghi.value=k.gh?'••••••••'+k.gh.slice(-4):'';
-  gi.dataset.masked='true';ghi.dataset.masked='true';
+  const gi=document.getElementById('settingGroqKey');
+  const ai=document.getElementById('settingAnthropicKey');
+  const ghi=document.getElementById('settingGhToken');
+  gi.value=k.groq?'••••••••'+k.groq.slice(-4):'';
+  ai.value=k.anthropic?'••••••••'+k.anthropic.slice(-4):'';
+  ghi.value=k.gh?'••••••••'+k.gh.slice(-4):'';
+  gi.dataset.masked='true';ai.dataset.masked='true';ghi.dataset.masked='true';
   updateKeyStatuses();document.getElementById('settingsModal').classList.add('open');
 }
 function closeSettings(){document.getElementById('settingsModal').classList.remove('open');}
 async function saveSettings(){
   const k=getKeys();
   const gv=document.getElementById('settingGroqKey').value.trim();
+  const av=document.getElementById('settingAnthropicKey').value.trim();
   const ghv=document.getElementById('settingGhToken').value.trim();
   if(gv&&!gv.startsWith('••'))k.groq=gv;
+  if(av&&!av.startsWith('••'))k.anthropic=av;
   if(ghv&&!ghv.startsWith('••'))k.gh=ghv;
   saveKeys(k);updateKeyStatuses();closeSettings();toast('✓ 설정 저장됨');
   if(k.gh){await initGist();await syncToGist();}
 }
 document.addEventListener('focus',e=>{
-  if((e.target.id==='settingGroqKey'||e.target.id==='settingGhToken')&&e.target.dataset.masked==='true'){e.target.value='';e.target.dataset.masked='false';}
+  if(['settingGroqKey','settingAnthropicKey','settingGhToken'].includes(e.target.id)&&e.target.dataset.masked==='true'){e.target.value='';e.target.dataset.masked='false';}
 },true);
 function updateKeyStatuses(){
   const k=getKeys();
-  const gs=document.getElementById('groqKeyStatus'),ts=document.getElementById('ghTokenStatus');
+  const gs=document.getElementById('groqKeyStatus');
+  const as=document.getElementById('anthropicKeyStatus');
+  const ts=document.getElementById('ghTokenStatus');
   gs.className=k.groq?'key-status ok':'key-status empty';gs.textContent=k.groq?'✓ 설정됨':'⬤ 미설정';
+  if(as){as.className=k.anthropic?'key-status ok':'key-status empty';as.textContent=k.anthropic?'✓ 설정됨':'⬤ 미설정';}
   ts.className=k.gh?'key-status ok':'key-status empty';ts.textContent=k.gh?'✓ 설정됨':'⬤ 미설정';
   const haGh=!!k.gh;
   document.getElementById('gistSyncBtn').style.display=haGh?'inline-flex':'none';
@@ -1462,6 +1491,18 @@ async function testGroqKey(){
     if(r.ok){st.className='key-status ok';st.textContent='✓ 유효한 키';}
     else{st.className='key-status error';st.textContent='✗ 유효하지 않음';}}
   catch{st.className='key-status error';st.textContent='✗ 연결 실패';}
+}
+async function testAnthropicKey(){
+  const val=document.getElementById('settingAnthropicKey').value.trim();
+  if(!val||val.startsWith('••')){toast('새 키를 입력해주세요');return;}
+  const st=document.getElementById('anthropicKeyStatus');st.className='key-status empty';st.textContent='테스트 중…';
+  try{
+    const r=await fetch(CLAUDE_API,{method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':val,'anthropic-version':'2023-06-01'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:10,messages:[{role:'user',content:'hi'}]})});
+    if(r.ok){st.className='key-status ok';st.textContent='✓ 유효한 키';}
+    else{st.className='key-status error';st.textContent='✗ 유효하지 않음 ('+r.status+')';}
+  }catch{st.className='key-status error';st.textContent='✗ 연결 실패';}
 }
 async function testGhToken(){
   const val=document.getElementById('settingGhToken').value.trim();
@@ -1514,8 +1555,8 @@ JSON만 응답:
 {"speakers":[{"name":"이름","lines":["발언1","발언2"]}]}
 화자 1명이거나 구분 불가 시 speakers 빈 배열.`;
   try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,messages:[{role:'user',content:prompt}]})});
+    const r=await fetch(CLAUDE_API,{method:'POST',headers:claudeHeaders(),
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:prompt}]})});
     if(!r.ok)return[];
     const d=await r.json();
     const txt=d.content.map(b=>b.text||'').join('');
@@ -1526,8 +1567,8 @@ JSON만 응답:
 
 async function claudeTranscribeFallback(blob){
   const b64=await toBase64(blob),mime=blob.type||'audio/webm';
-  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:[
+  const r=await fetch(CLAUDE_API,{method:'POST',headers:claudeHeaders(),
+    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:[
       {type:'document',source:{type:'base64',media_type:mime,data:b64.split(',')[1]}},
       {type:'text',text:'이 오디오를 전사하고 화자를 구분하여 JSON만 응답하세요.\n{"transcript":"전체텍스트","speakers":[{"name":"화자1","lines":["발언"]}]}\n화자 구분 어려우면 speakers 빈 배열.'}
     ]}]})});
@@ -1555,8 +1596,8 @@ async function analyze(transcript,speakers,location){
 ${transcript}
 
 {"title":"회의 제목","date":"일시","location":"장소","attendees":"참석자(화자 이름 활용)","issues":[{"title":"쟁점","content":"내용"}],"decisions":["결정사항"],"actions":[{"task":"할일","owner":"담당자(화자이름활용)","due":"기한"}],"summary":"요약 3~5문장","suggestions":[{"tag":"효율화","content":"제안"},{"tag":"후속조치","content":"제안"},{"tag":"리스크","content":"주의사항"},{"tag":"다음회의","content":"추천안건"}]}`;
-  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
+  const r=await fetch(CLAUDE_API,{method:'POST',headers:claudeHeaders(),
+    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:prompt}]})});
   if(!r.ok)throw new Error('분석 오류 '+r.status);
   const d=await r.json();const txt=d.content.map(b=>b.text||'').join('');
   return JSON.parse(txt.replace(/```json|```/g,'').trim());
@@ -1860,6 +1901,7 @@ function fmt(s){return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60)
 async function generate(){
   const src=audioBlob||uploadedFile;if(!src){toast('녹음하거나 파일을 업로드해주세요');return;}
   if(!getGroqKey()){toast('⚙️ 설정에서 Groq API 키를 먼저 입력해주세요');openSettings();return;}
+  if(!getAnthropicKey()){toast('⚙️ 설정에서 Anthropic API 키를 먼저 입력해주세요');openSettings();return;}
   const location=document.getElementById('locationInput').value.trim();
   if(!isOnline){const r=new FileReader();r.onload=ev=>{addToQueue(ev.target.result,{location});toast('📴 오프라인 — 온라인 복귀 시 자동 처리');setStatus('queued','대기 중');renderQueueBadge();updateOnlineStatus();};r.readAsDataURL(src);return;}
   setLoading(true);setStatus('','AI 처리 중…');
