@@ -2137,12 +2137,13 @@ window.addEventListener('load',async ()=>{
 
   const k=getKeys();
   if(k.groq&&k.gemini){
-    // 핵심 API 키 있으면 바로 사용
+    // 핵심 API 키 있으면 바로 사용 — Gist 자동연결 없음 (401 콘솔 오류 방지)
     document.getElementById('setupOverlay').classList.add('hidden');
-    // Gist는 백그라운드에서 조용히 연결 (실패해도 화면에 영향 없음)
-    if(k.gh) initGist().catch(()=>{});
+    // Gist 배지만 상태 표시 (API 호출 없음)
+    if(k.gh&&localStorage.getItem(GIST_ID_KEY)){setGistBadge('synced','연결됨');}
+    else if(k.gh){setGistBadge('','● 미연결');}
   } else if(k.gh){
-    // 키 없지만 GitHub 토큰 있으면 — Gist에서 자동 복원 시도
+    // 키 없지만 GitHub 토큰 있으면 — Gist에서 자동 복원 시도 (새 기기 전용)
     toast('🔄 Gist에서 설정 자동 복원 중…');
     try{await loadFromGist();}catch{}
     const k2=getKeys();
