@@ -1442,7 +1442,8 @@ async function saveSettings(){
   const gv=document.getElementById('settingGroqKey').value.trim();
   const ghv=document.getElementById('settingGhToken').value.trim();
   if(gv&&!gv.startsWith('••'))k.groq=gv;
-  if(ghv&&!ghv.startsWith('••'))k.gh=ghv;
+  const ghChanged=ghv&&!ghv.startsWith('••')&&ghv!==k.gh;
+  if(ghChanged){k.gh=ghv;localStorage.removeItem(GIST_ID_KEY);}// 토큰 변경 시 기존 Gist ID 초기화
   saveKeys(k);updateKeyStatuses();closeSettings();toast('✓ 설정 저장됨');
   if(k.gh){await initGist();await syncToGist();}
 }
@@ -1472,11 +1473,12 @@ async function testGhToken(){
   const val=document.getElementById('settingGhToken').value.trim();
   if(!val||val.startsWith('••')){toast('새 토큰을 입력해주세요');return;}
   const st=document.getElementById('ghTokenStatus');st.className='key-status empty';st.textContent='테스트 중…';
-  try{const r=await fetch('https://api.github.com/user',{headers:{Authorization:'token '+val}});
-    const d=await r.json();
-    if(r.ok){st.className='key-status ok';st.textContent='✓ '+d.login;}
-    else{st.className='key-status error';st.textContent='✗ 유효하지 않음';}}
-  catch{st.className='key-status error';st.textContent='✗ 연결 실패';}
+  try{
+    // gist 권한만 있는 토큰은 /user 대신 /gists 로 테스트
+    const r=await fetch('https://api.github.com/gists?per_page=1',{headers:{Authorization:'token '+val}});
+    if(r.ok){st.className='key-status ok';st.textContent='✓ 유효한 토큰';}
+    else{st.className='key-status error';st.textContent='✗ 유효하지 않음 ('+r.status+')';}
+  }catch{st.className='key-status error';st.textContent='✗ 연결 실패';}
 }
 
 // ═══════════════════════════════════════════
