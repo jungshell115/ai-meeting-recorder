@@ -1458,7 +1458,10 @@ async function saveSetup(){
   const gh=document.getElementById('setupGhToken').value.trim();
   if(!groq){toast('Groq API 키를 입력해주세요');return;}
   if(!gemini){toast('Google Gemini API 키를 입력해주세요');return;}
-  const k=getKeys();k.groq=groq;k.gemini=gemini;if(gh)k.gh=gh;k.setupDone=true;saveKeys(k);
+  const k=getKeys();
+  k.groq=groq;k.gemini=gemini;
+  if(gh&&gh!==k.gh){k.gh=gh;localStorage.removeItem(GIST_ID_KEY);}// 토큰 변경 시 기존 Gist ID 초기화
+  k.setupDone=true;saveKeys(k);
   document.getElementById('setupOverlay').classList.add('hidden');
   toast('✓ 설정 저장 중…');
   if(gh){await initGist();await syncToGist();toast('✓ 설정 완료 & Gist 동기화됨 — 이제 어느 기기에서든 자동 적용돼요');}
