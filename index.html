@@ -1484,29 +1484,71 @@ async function testGhToken(){
 // ═══════════════════════════════════════════
 //   ① GROQ WHISPER — 전사 + 화자 분리
 // ═══════════════════════════════════════════
+const GROQ_MAX_BYTES = 24*1024*1024; // 24MB (여유 1MB)
+const TARGET_SR = 16000;             // 16kHz 모노
+const CHUNK_SECS = 10*60;            // 청크당 10분
+
+// WAV 인코더 (float32 → 16kHz 모노 WAV)
+function encodeWAV(samples, sr){
+  const buf=new ArrayBuffer(44+samples.length*2), v=new DataView(buf);
+  const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+  ws(0,'RIFF');v.setUint32(4,36+samples.length*2,true);
+  ws(8,'WAVE');ws(12,'fmt ');v.setUint32(16,16,true);
+  v.setUint16(20,1,true);v.setUint16(22,1,true);
+  v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);
+  v.setUint16(32,2,true);v.setUint16(34,16,true);
+  ws(36,'data');v.setUint32(40,samples.length*2,true);
+  let off=44;
+  for(let i=0;i<samples.length;i++){const s=Math.max(-1,Math.min(1,samples[i]));v.setInt16(off,s<0?s*0x8000:s*0x7FFF,true);off+=2;}
+  return new Blob([buf],{type:'audio/wav'});
+}
+
+// 대용량 파일 → 압축 + 청크 분할
+async function prepareAudio(blob){
+  if(blob.size<=GROQ_MAX_BYTES)return[blob]; // 24MB 이하면 그대로
+  setProgress('오디오 압축 중… (대용량 자동 처리)',8);
+  try{
+    const arrayBuffer=await blob.arrayBuffer();
+    const audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    const audioBuffer=await audioCtx.decodeAudioData(arrayBuffer);
+    await audioCtx.close();
+    const totalSamples=Math.ceil(audioBuffer.duration*TARGET_SR);
+    const offCtx=new OfflineAudioContext(1,totalSamples,TARGET_SR);
+    const src=offCtx.createBufferSource();src.buffer=audioBuffer;
+    src.connect(offCtx.destination);src.start();
+    const rendered=await offCtx.startRendering();
+    const samples=rendered.getChannelData(0);
+    const perChunk=CHUNK_SECS*TARGET_SR;
+    const chunks=[];
+    for(let i=0;i<samples.length;i+=perChunk)chunks.push(encodeWAV(samples.slice(i,i+perChunk),TARGET_SR));
+    return chunks;
+  }catch(e){throw new Error('오디오 압축 실패: '+e.message);}
+}
+
 async function transcribeWithSpeakers(blob){
   const groqKey=getGroqKey();
   if(groqKey){
-    // Groq Whisper 25MB 제한 체크
-    if(blob.size > 25 * 1024 * 1024){
-      throw new Error(`파일이 너무 큽니다 (${(blob.size/1024/1024).toFixed(1)}MB). Groq Whisper는 25MB 이하만 지원합니다.\n압축된 MP3나 M4A 파일을 사용해주세요.`);
-    }
     try{
-      setProgress('Groq Whisper 음성 변환 중…',20);
-      const ext=blob.type.includes('mp4')?'mp4':blob.type.includes('ogg')?'ogg':blob.type.includes('m4a')?'m4a':'webm';
-      const file=new File([blob],`audio.${ext}`,{type:blob.type});
-      const fd=new FormData();
-      fd.append('file',file);fd.append('model','whisper-large-v3');
-      fd.append('language','ko');fd.append('response_format','verbose_json');
-      fd.append('timestamp_granularities[]','segment');
-      const r=await fetch('https://api.groq.com/openai/v1/audio/transcriptions',{method:'POST',headers:{Authorization:'Bearer '+groqKey},body:fd});
-      if(!r.ok)throw new Error('Groq 오류 '+r.status);
-      const data=await r.json();
-      const transcript=data.text||'';
-      const segments=data.segments||[];
+      const chunks=await prepareAudio(blob);
+      let fullTranscript='', allSegments=[];
+      for(let i=0;i<chunks.length;i++){
+        const label=chunks.length>1?` (${i+1}/${chunks.length}청크)`:'';
+        setProgress('Groq Whisper 음성 변환 중…'+label, 20+Math.floor(i/chunks.length*25));
+        const fd=new FormData();
+        fd.append('file',new File([chunks[i]],`audio_${i}.wav`,{type:'audio/wav'}));
+        fd.append('model','whisper-large-v3');
+        fd.append('language','ko');fd.append('response_format','verbose_json');
+        fd.append('timestamp_granularities[]','segment');
+        const r=await fetch('https://api.groq.com/openai/v1/audio/transcriptions',{method:'POST',headers:{Authorization:'Bearer '+groqKey},body:fd});
+        if(!r.ok)throw new Error('Groq 오류 '+r.status);
+        const data=await r.json();
+        const offsetSecs=i*CHUNK_SECS;
+        fullTranscript+=(fullTranscript?' ':'')+( data.text||'');
+        if(data.segments)allSegments=allSegments.concat(data.segments.map(s=>({...s,start:s.start+offsetSecs})));
+      }
       setProgress('화자 분리 분석 중…',45);
-      const speakers=await diarizeWithGroq(transcript,segments);
-      return{transcript,speakers};
+      const speakers=await diarizeWithGroq(fullTranscript,allSegments);
+      return{transcript:fullTranscript,speakers};
     }catch(err){console.warn('[Groq] 오류:',err.message);throw err;}
   }
   throw new Error('Groq API 키가 설정되지 않았습니다');
