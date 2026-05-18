@@ -1301,12 +1301,12 @@ body {
   <div class="setup-card">
     <div class="setup-logo">🎙️</div>
     <div class="setup-title">AI Meeting Recorder</div>
-    <div class="setup-sub">Groq API 키 하나로 전사·분석 모두 무료!</div>
+    <div class="setup-sub">Groq(전사) + Gemini(분석) — 모두 무료!</div>
 
     <div class="setup-step">
       <div class="setup-step-num">1</div>
       <div class="setup-step-text">
-        <strong>Groq API 키</strong> — 음성 전사 + 회의록 분석<br>
+        <strong>Groq API 키</strong> — 음성 전사 (Whisper)<br>
         <a href="https://console.groq.com" target="_blank" style="color:var(--accent);font-size:12px">console.groq.com → API Keys → Create (무료)</a>
       </div>
     </div>
@@ -1316,6 +1316,17 @@ body {
 
     <div class="setup-step">
       <div class="setup-step-num">2</div>
+      <div class="setup-step-text">
+        <strong>Google Gemini API 키</strong> — 화자분리 + 회의록 분석<br>
+        <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent);font-size:12px">aistudio.google.com → Get API key (무료)</a>
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:12px">
+      <input type="password" id="setupGeminiKey" placeholder="AIza..." autocomplete="off">
+    </div>
+
+    <div class="setup-step">
+      <div class="setup-step-num">3</div>
       <div class="setup-step-text">
         <strong>GitHub Token</strong> — 회의록 클라우드 저장 (선택)<br>
         <a href="https://github.com/settings/tokens/new?scopes=gist&description=AI+Meeting+Recorder" target="_blank" style="color:var(--accent);font-size:12px">github.com → Settings → Tokens → New (gist 권한만)</a>
@@ -1349,7 +1360,19 @@ body {
     </div>
 
     <div class="settings-section">
-      <div class="settings-section-title">② GitHub Gist — 클라우드 저장</div>
+      <div class="settings-section-title">② Google Gemini — 화자분리 + 분석</div>
+      <div class="key-input-row">
+        <div class="field">
+          <input type="password" id="settingGeminiKey" placeholder="AIza..." autocomplete="off">
+        </div>
+        <button class="btn btn-ghost" onclick="testGeminiKey()">테스트</button>
+      </div>
+      <div class="key-status empty" id="geminiKeyStatus">⬤ 미설정</div>
+      <div style="margin-top:6px;font-size:11px;color:var(--text3)"><a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent)">aistudio.google.com</a> → Get API key (무료)</div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">③ GitHub Gist — 클라우드 저장</div>
       <div class="key-input-row">
         <div class="field">
           <input type="password" id="settingGhToken" placeholder="ghp_..." autocomplete="off">
@@ -1393,25 +1416,29 @@ const QUEUE_KEY   = 'ai_meeting_queue_v2';
 const KEYS_KEY    = 'ai_meeting_keys_v1';
 const GIST_ID_KEY = 'ai_meeting_gist_id';
 const SPEAKER_COLORS = ['#0a84ff','#30d158','#ff9f0a','#bf5af2','#ff453a','#32ade6'];
-const GROQ_CHAT_API  = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_LLM_MODEL = 'llama-3.3-70b-versatile';  // 분석용 (6k TPM)
-const GROQ_FAST_MODEL= 'llama-3.1-8b-instant';      // 화자분리용 (20k TPM)
-async function groqChat(messages,maxTokens=2000,model=GROQ_LLM_MODEL){
+// ── Gemini 2.0 Flash ──
+const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+function getGeminiKey(){return getKeys().gemini||'';}
+async function geminiChat(prompt, maxTokens=4000){
+  const key=getGeminiKey();
+  if(!key)throw new Error('Gemini API 키가 설정되지 않았습니다');
   for(let attempt=0;attempt<3;attempt++){
-    const r=await fetch(GROQ_CHAT_API,{method:'POST',
-      headers:{'Authorization':'Bearer '+getGroqKey(),'Content-Type':'application/json'},
-      body:JSON.stringify({model,messages,max_tokens:maxTokens})});
+    const r=await fetch(`${GEMINI_API}?key=${key}`,{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],
+        generationConfig:{maxOutputTokens:maxTokens,temperature:0.3}})});
     if(r.status===429){
-      const wait=(attempt+1)*25; // 25s → 50s → 75s
-      toast(`⏳ Groq 요청 한도 — ${wait}초 후 재시도 (${attempt+1}/3)…`);
-      setProgress(`Groq 요청 한도 초과 — ${wait}초 대기 중…`,-1);
+      const wait=(attempt+1)*20;
+      toast(`⏳ Gemini 요청 한도 — ${wait}초 후 재시도 (${attempt+1}/3)…`);
+      setProgress(`Gemini 요청 한도 — ${wait}초 대기 중…`,-1);
       await new Promise(res=>setTimeout(res,wait*1000));
       continue;
     }
-    if(!r.ok)throw new Error('Groq LLM 오류 '+r.status);
-    const d=await r.json();return d.choices[0].message.content;
+    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error('Gemini 오류 '+r.status+': '+(e.error?.message||''));}
+    const d=await r.json();
+    return d.candidates?.[0]?.content?.parts?.[0]?.text||'';
   }
-  throw new Error('Groq 요청 한도 초과입니다. 1분 후 다시 시도해주세요.');
+  throw new Error('Gemini 요청 한도 초과입니다. 잠시 후 다시 시도해주세요.');
 }
 
 let mediaRecorder=null,audioChunks=[],recInterval=null,recSecs=0;
@@ -1424,12 +1451,14 @@ function saveKeys(k){try{localStorage.setItem(KEYS_KEY,JSON.stringify(k));}catch
 function getGroqKey(){return getKeys().groq||'';}
 function getGhToken(){return getKeys().gh||'';}
 // ─── Setup wizard ───
-function checkFirstRun(){const k=getKeys();if(!k.groq&&!k.setupDone){document.getElementById('setupOverlay').classList.remove('hidden');}}
+function checkFirstRun(){const k=getKeys();if((!k.groq||!k.gemini)&&!k.setupDone){document.getElementById('setupOverlay').classList.remove('hidden');}}
 async function saveSetup(){
   const groq=document.getElementById('setupGroqKey').value.trim();
+  const gemini=document.getElementById('setupGeminiKey').value.trim();
   const gh=document.getElementById('setupGhToken').value.trim();
   if(!groq){toast('Groq API 키를 입력해주세요');return;}
-  const k=getKeys();k.groq=groq;if(gh)k.gh=gh;k.setupDone=true;saveKeys(k);
+  if(!gemini){toast('Google Gemini API 키를 입력해주세요');return;}
+  const k=getKeys();k.groq=groq;k.gemini=gemini;if(gh)k.gh=gh;k.setupDone=true;saveKeys(k);
   document.getElementById('setupOverlay').classList.add('hidden');
   toast('✓ 설정 저장 중…');
   if(gh){await initGist();await syncToGist();toast('✓ 설정 완료 & Gist 동기화됨 — 이제 어느 기기에서든 자동 적용돼요');}
@@ -1441,32 +1470,38 @@ function skipSetup(){const k=getKeys();k.setupDone=true;saveKeys(k);document.get
 function openSettings(){
   const k=getKeys();
   const gi=document.getElementById('settingGroqKey');
+  const gemi=document.getElementById('settingGeminiKey');
   const ghi=document.getElementById('settingGhToken');
   gi.value=k.groq?'••••••••'+k.groq.slice(-4):'';
+  gemi.value=k.gemini?'••••••••'+k.gemini.slice(-4):'';
   ghi.value=k.gh?'••••••••'+k.gh.slice(-4):'';
-  gi.dataset.masked='true';ghi.dataset.masked='true';
+  gi.dataset.masked='true';gemi.dataset.masked='true';ghi.dataset.masked='true';
   updateKeyStatuses();document.getElementById('settingsModal').classList.add('open');
 }
 function closeSettings(){document.getElementById('settingsModal').classList.remove('open');}
 async function saveSettings(){
   const k=getKeys();
   const gv=document.getElementById('settingGroqKey').value.trim();
+  const gemv=document.getElementById('settingGeminiKey').value.trim();
   const ghv=document.getElementById('settingGhToken').value.trim();
   if(gv&&!gv.startsWith('••'))k.groq=gv;
+  if(gemv&&!gemv.startsWith('••'))k.gemini=gemv;
   const ghChanged=ghv&&!ghv.startsWith('••')&&ghv!==k.gh;
   if(ghChanged){k.gh=ghv;localStorage.removeItem(GIST_ID_KEY);}// 토큰 변경 시 기존 Gist ID 초기화
-  if(k.groq)k.setupDone=true; // Groq 키 있으면 설정 완료 표시
+  if(k.groq&&k.gemini)k.setupDone=true; // 두 키 모두 있어야 설정 완료
   saveKeys(k);updateKeyStatuses();closeSettings();toast('✓ 설정 저장됨');
   if(k.gh){await initGist();await syncToGist();}
 }
 document.addEventListener('focus',e=>{
-  if(['settingGroqKey','settingGhToken'].includes(e.target.id)&&e.target.dataset.masked==='true'){e.target.value='';e.target.dataset.masked='false';}
+  if(['settingGroqKey','settingGeminiKey','settingGhToken'].includes(e.target.id)&&e.target.dataset.masked==='true'){e.target.value='';e.target.dataset.masked='false';}
 },true);
 function updateKeyStatuses(){
   const k=getKeys();
   const gs=document.getElementById('groqKeyStatus');
+  const gems=document.getElementById('geminiKeyStatus');
   const ts=document.getElementById('ghTokenStatus');
   gs.className=k.groq?'key-status ok':'key-status empty';gs.textContent=k.groq?'✓ 설정됨':'⬤ 미설정';
+  gems.className=k.gemini?'key-status ok':'key-status empty';gems.textContent=k.gemini?'✓ 설정됨':'⬤ 미설정';
   ts.className=k.gh?'key-status ok':'key-status empty';ts.textContent=k.gh?'✓ 설정됨':'⬤ 미설정';
   const haGh=!!k.gh;
   document.getElementById('gistSyncBtn').style.display=haGh?'inline-flex':'none';
@@ -1480,6 +1515,18 @@ async function testGroqKey(){
     if(r.ok){st.className='key-status ok';st.textContent='✓ 유효한 키';}
     else{st.className='key-status error';st.textContent='✗ 유효하지 않음';}}
   catch{st.className='key-status error';st.textContent='✗ 연결 실패';}
+}
+async function testGeminiKey(){
+  const val=document.getElementById('settingGeminiKey').value.trim();
+  if(!val||val.startsWith('••')){toast('새 키를 입력해주세요');return;}
+  const st=document.getElementById('geminiKeyStatus');st.className='key-status empty';st.textContent='테스트 중…';
+  try{
+    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${val}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:'안녕'}]}],generationConfig:{maxOutputTokens:10}})});
+    if(r.ok){st.className='key-status ok';st.textContent='✓ 유효한 키';}
+    else{const e=await r.json().catch(()=>({}));st.className='key-status error';st.textContent='✗ '+(e.error?.message||'유효하지 않음');}
+  }catch{st.className='key-status error';st.textContent='✗ 연결 실패';}
 }
 async function testGhToken(){
   const val=document.getElementById('settingGhToken').value.trim();
@@ -1559,34 +1606,35 @@ async function transcribeWithSpeakers(blob){
         if(data.segments)allSegments=allSegments.concat(data.segments.map(s=>({...s,start:s.start+offsetSecs})));
       }
       setProgress('화자 분리 분석 중…',45);
-      const speakers=await diarizeWithGroq(fullTranscript,allSegments);
+      const speakers=await diarizeWithGemini(fullTranscript,allSegments);
       return{transcript:fullTranscript,speakers};
     }catch(err){console.warn('[Groq] 오류:',err.message);throw err;}
   }
   throw new Error('Groq API 키가 설정되지 않았습니다');
 }
 
-async function diarizeWithGroq(transcript,segments){
-  // 세그먼트 최대 100개, 전사 전체도 함께 제공해 맥락 강화
-  const segText=segments.slice(0,100).map(s=>`[${s.start.toFixed(1)}s] ${s.text.trim()}`).join('\n');
+async function diarizeWithGemini(transcript,segments){
+  // 세그먼트 최대 120개, 전사 전체도 함께 제공해 맥락 강화
+  const segText=segments.slice(0,120).map(s=>`[${s.start.toFixed(1)}s] ${s.text.trim()}`).join('\n');
   const prompt=`아래 회의 전사와 타임스탬프 세그먼트를 분석해 화자를 구분하세요.
 
 규칙:
-- 어투·호칭·역할(보고자/질문자/사회자 등)·발언 길이 등으로 화자 구분
-- 이름이 언급되면 실제 이름 사용, 없으면 "보고자", "질문자", "참석자A" 등 역할 기반 명칭
-- 각 화자의 대표 발언 3개 이상 추출
-- 화자가 명확히 2명 이상이면 반드시 구분할 것
+- 어투·호칭·역할(보고자/질문자/사회자 등)·발언 길이·문체 등으로 화자 구분
+- 이름이 언급되면 실제 이름 사용, 없으면 "보고자", "질문자", "사회자", "참석자A" 등 역할 기반 명칭
+- 각 화자의 대표 발언 3개 이상 추출 (원문 그대로)
+- 화자가 명확히 2명 이상이면 반드시 구분할 것 — 1명으로 판단해도 되는지 재확인
+- 발언 분량이 크게 차이 나면 소수 발언자도 별도 화자로 처리
 
-전사 요약 (맥락용):
-${transcript.slice(0,600)}
+전사 전문 (맥락용):
+${transcript.slice(0,1500)}
 
 타임스탬프 세그먼트:
 ${segText}
 
-JSON만 응답 (화자 구분 불가 시 빈 배열):
+순수 JSON만 응답 (화자 구분 불가 시 빈 배열):
 {"speakers":[{"name":"화자명","lines":["대표발언1","대표발언2","대표발언3"]}]}`;
   try{
-    const txt=await groqChat([{role:'user',content:prompt}],2000,GROQ_FAST_MODEL); // 8b 모델로 rate limit 절약
+    const txt=await geminiChat(prompt,2000);
     const p=JSON.parse(txt.replace(/```json|```/g,'').trim());
     return p.speakers||[];
   }catch{return[];}
@@ -1627,15 +1675,15 @@ ${transcript}
 - summary: 전사 핵심 내용 4~6문장, 구체적 수치·결과 반드시 포함
 
 {"title":"","date":"","location":"","attendees":"","issues":[{"title":"","content":""}],"decisions":[""],"actions":[{"task":"","owner":"","due":""}],"summary":"","suggestions":[{"tag":"효율화","content":""},{"tag":"후속조치","content":""},{"tag":"리스크","content":""},{"tag":"다음회의","content":""}]}`;
-  // 전사가 길면 앞·중간·끝 균등 추출 (6k TPM 한도 내 유지)
-  const MAX_CHARS=5000;
+  // Gemini는 TPM 여유 — 최대 12000자까지 허용 (앞·중간·끝 균등 추출)
+  const MAX_CHARS=12000;
   const tx=transcript.length>MAX_CHARS
-    ?transcript.slice(0,2000)+'\n...(중략)...\n'
-     +transcript.slice(Math.floor(transcript.length/2)-500,Math.floor(transcript.length/2)+500)
-     +'\n...(중략)...\n'+transcript.slice(-1500)
+    ?transcript.slice(0,5000)+'\n...(중략)...\n'
+     +transcript.slice(Math.floor(transcript.length/2)-1000,Math.floor(transcript.length/2)+1000)
+     +'\n...(중략)...\n'+transcript.slice(-3000)
     :transcript;
   const finalPrompt=prompt.replace(transcript,tx);
-  const txt=await groqChat([{role:'user',content:finalPrompt}],3000);
+  const txt=await geminiChat(finalPrompt,4000);
   return JSON.parse(txt.replace(/```json|```/g,'').trim());
 }
 
@@ -1673,7 +1721,7 @@ async function syncToGist(){
   try{
     // 키를 간단히 XOR 난독화해서 Gist에 저장 (plain text 노출 방지)
     const k=getKeys();
-    const obf={groq:k.groq?btoa(k.groq):'',gh:k.gh?btoa(k.gh):'',_v:2};
+    const obf={groq:k.groq?btoa(k.groq):'',gemini:k.gemini?btoa(k.gemini):'',gh:k.gh?btoa(k.gh):'',_v:3};
     const payload={
       history:getHistory(),
       locations:getFavLocations(),
@@ -1716,6 +1764,7 @@ async function loadFromGist(){
     if(data.keys_obf){
       const k=getKeys();
       if(data.keys_obf.groq){try{k.groq=atob(data.keys_obf.groq);}catch{}}
+      if(data.keys_obf.gemini){try{k.gemini=atob(data.keys_obf.gemini);}catch{}}
       if(data.keys_obf.gh){try{k.gh=atob(data.keys_obf.gh);}catch{}}
       k.setupDone=true;
       saveKeys(k);updateKeyStatuses();
@@ -1937,6 +1986,7 @@ function fmt(s){return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60)
 async function generate(){
   const src=audioBlob||uploadedFile;if(!src){toast('녹음하거나 파일을 업로드해주세요');return;}
   if(!getGroqKey()){toast('⚙️ 설정에서 Groq API 키를 먼저 입력해주세요');openSettings();return;}
+  if(!getGeminiKey()){toast('⚙️ 설정에서 Google Gemini API 키를 먼저 입력해주세요');openSettings();return;}
   const location=document.getElementById('locationInput').value.trim();
   if(!isOnline){const r=new FileReader();r.onload=ev=>{addToQueue(ev.target.result,{location});toast('📴 오프라인 — 온라인 복귀 시 자동 처리');setStatus('queued','대기 중');renderQueueBadge();updateOnlineStatus();};r.readAsDataURL(src);return;}
   // 업로드 파일이면 파일 날짜를 힌트로, 실시간 녹음이면 null (현재 시각 사용)
