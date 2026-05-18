@@ -1517,9 +1517,11 @@ async function testGroqKey(){
   if(!val||val.startsWith('••')){toast('새 키를 입력해주세요');return;}
   const st=document.getElementById('groqKeyStatus');st.className='key-status empty';st.textContent='테스트 중…';
   try{const r=await fetch('https://api.groq.com/openai/v1/models',{headers:{Authorization:'Bearer '+val}});
-    if(r.ok){st.className='key-status ok';st.textContent='✓ 유효한 키';}
-    else{st.className='key-status error';st.textContent='✗ 유효하지 않음';}}
-  catch{st.className='key-status error';st.textContent='✗ 연결 실패';}
+    if(r.ok){
+      st.className='key-status ok';st.textContent='✓ 유효 — 저장됨';
+      const k=getKeys();k.groq=val;saveKeys(k); // 테스트 성공 시 즉시 저장
+    } else{st.className='key-status error';st.textContent='✗ 유효하지 않음';}
+  }catch{st.className='key-status error';st.textContent='✗ 연결 실패';}
 }
 async function testGeminiKey(){
   const val=document.getElementById('settingGeminiKey').value.trim();
@@ -1529,8 +1531,10 @@ async function testGeminiKey(){
     const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${val}`,{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({contents:[{parts:[{text:'안녕'}]}],generationConfig:{maxOutputTokens:10}})});
-    if(r.ok){st.className='key-status ok';st.textContent='✓ 유효한 키';}
-    else{const e=await r.json().catch(()=>({}));st.className='key-status error';st.textContent='✗ '+(e.error?.message||'유효하지 않음');}
+    if(r.ok){
+      st.className='key-status ok';st.textContent='✓ 유효 — 저장됨';
+      const k=getKeys();k.gemini=val;if(k.groq&&k.gemini)k.setupDone=true;saveKeys(k); // 테스트 성공 시 즉시 저장
+    } else{const e=await r.json().catch(()=>({}));st.className='key-status error';st.textContent='✗ '+(e.error?.message||'유효하지 않음');}
   }catch{st.className='key-status error';st.textContent='✗ 연결 실패';}
 }
 async function testGhToken(){
@@ -1538,10 +1542,16 @@ async function testGhToken(){
   if(!val||val.startsWith('••')){toast('새 토큰을 입력해주세요');return;}
   const st=document.getElementById('ghTokenStatus');st.className='key-status empty';st.textContent='테스트 중…';
   try{
-    // gist 권한만 있는 토큰은 /user 대신 /gists 로 테스트
     const r=await fetch('https://api.github.com/gists?per_page=1',{headers:{Authorization:'token '+val}});
-    if(r.ok){st.className='key-status ok';st.textContent='✓ 유효한 토큰';}
-    else{st.className='key-status error';st.textContent='✗ 유효하지 않음 ('+r.status+')';}
+    if(r.ok){
+      st.className='key-status ok';st.textContent='✓ 유효 — 저장됨';
+      const k=getKeys();
+      const changed=val!==k.gh;
+      if(changed)localStorage.removeItem(GIST_ID_KEY); // 토큰 바뀌면 기존 Gist ID 초기화
+      k.gh=val;saveKeys(k); // 테스트 성공 시 즉시 저장
+      updateKeyStatuses();
+      if(changed) initGist().catch(()=>{}); // 새 토큰으로 Gist 재연결
+    } else{st.className='key-status error';st.textContent='✗ 유효하지 않음 ('+r.status+')';}
   }catch{st.className='key-status error';st.textContent='✗ 연결 실패';}
 }
 
