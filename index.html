@@ -1485,9 +1485,13 @@ async function testGhToken(){
 async function transcribeWithSpeakers(blob){
   const groqKey=getGroqKey();
   if(groqKey){
+    // Groq Whisper 25MB 제한 체크
+    if(blob.size > 25 * 1024 * 1024){
+      throw new Error(`파일이 너무 큽니다 (${(blob.size/1024/1024).toFixed(1)}MB). Groq Whisper는 25MB 이하만 지원합니다.\n압축된 MP3나 M4A 파일을 사용해주세요.`);
+    }
     try{
       setProgress('Groq Whisper 음성 변환 중…',20);
-      const ext=blob.type.includes('mp4')?'mp4':blob.type.includes('ogg')?'ogg':'webm';
+      const ext=blob.type.includes('mp4')?'mp4':blob.type.includes('ogg')?'ogg':blob.type.includes('m4a')?'m4a':'webm';
       const file=new File([blob],`audio.${ext}`,{type:blob.type});
       const fd=new FormData();
       fd.append('file',file);fd.append('model','whisper-large-v3');
@@ -1730,7 +1734,7 @@ function saveCurrentLocation(){
 //   SERVICE WORKER
 // ═══════════════════════════════════════════
 if('serviceWorker'in navigator){
-  navigator.serviceWorker.register('/sw.js').catch(err=>console.warn('[SW]',err));
+  navigator.serviceWorker.register('./sw.js').catch(err=>console.warn('[SW]',err));
   navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='PROCESS_QUEUE')processQueue();});
 }
 
