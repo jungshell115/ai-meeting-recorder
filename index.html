@@ -1384,6 +1384,7 @@ body {
         <div class="gist-sync-badge" id="gistBadge">● 미연결</div>
         <button class="btn btn-ghost" id="gistSyncBtn" onclick="syncToGist()" style="font-size:12px;display:none">↑ 지금 동기화</button>
         <button class="btn btn-ghost" id="gistLoadBtn" onclick="loadFromGist()" style="font-size:12px;display:none">↓ 불러오기</button>
+        <button class="btn btn-ghost" id="gistResetBtn" onclick="resetGistConnection()" style="font-size:12px;display:none;color:var(--warn)">↺ 재연결</button>
       </div>
     </div>
 
@@ -1509,6 +1510,7 @@ function updateKeyStatuses(){
   const haGh=!!k.gh;
   document.getElementById('gistSyncBtn').style.display=haGh?'inline-flex':'none';
   document.getElementById('gistLoadBtn').style.display=haGh?'inline-flex':'none';
+  document.getElementById('gistResetBtn').style.display=haGh?'inline-flex':'none';
 }
 async function testGroqKey(){
   const val=document.getElementById('settingGroqKey').value.trim();
@@ -1792,6 +1794,11 @@ async function loadFromGist(){
     toast(`✓ 복원 완료 — 회의록 ${remote.length}건, 키 및 장소 목록`);
     if(document.getElementById('view-history').style.display!=='none')renderHistory();
   }catch(e){setGistBadge('error','불러오기 실패');toast('불러오기 실패: '+e.message);}
+}
+async function resetGistConnection(){
+  localStorage.removeItem(GIST_ID_KEY);
+  setGistBadge('','● 미연결');
+  toast('↺ Gist 연결 초기화 — 저장 후 재연결됩니다');
 }
 async function saveAndSync(d){
   saveHistory(d);
@@ -2116,26 +2123,23 @@ window.addEventListener('load',async ()=>{
   updateOnlineStatus();renderQueueBadge();updateKeyStatuses();
 
   const k=getKeys();
-  if(k.gh){
-    // GitHub 토큰 있으면 Gist 연결
-    await initGist();
-    if(!k.groq||!k.gemini){
-      // 키가 하나라도 없으면 Gist에서 자동 복원 시도
-      toast('🔄 Gist에서 설정 자동 복원 중…');
-      await loadFromGist();
-    }
-    // 복원 후에도 키가 없으면 셋업 화면 표시, 있으면 확실히 숨김
+  if(k.groq&&k.gemini){
+    // 핵심 API 키 있으면 바로 사용
+    document.getElementById('setupOverlay').classList.add('hidden');
+    // Gist는 백그라운드에서 조용히 연결 (실패해도 화면에 영향 없음)
+    if(k.gh) initGist().catch(()=>{});
+  } else if(k.gh){
+    // 키 없지만 GitHub 토큰 있으면 — Gist에서 자동 복원 시도
+    toast('🔄 Gist에서 설정 자동 복원 중…');
+    try{await loadFromGist();}catch{}
     const k2=getKeys();
     if(k2.groq&&k2.gemini){
       document.getElementById('setupOverlay').classList.add('hidden');
     } else {
       checkFirstRun();
     }
-  } else if(k.groq&&k.gemini){
-    // 두 키 모두 있으면 앱 바로 사용
-    document.getElementById('setupOverlay').classList.add('hidden');
   } else {
-    // 키 없는 경우 — 셋업 화면 표시
+    // 완전 새 기기 — 셋업 화면 표시
     checkFirstRun();
   }
 
