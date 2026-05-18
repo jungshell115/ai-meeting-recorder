@@ -1556,42 +1556,67 @@ async function transcribeWithSpeakers(blob){
 }
 
 async function diarizeWithGroq(transcript,segments){
-  const segText=segments.slice(0,60).map(s=>`[${s.start.toFixed(1)}s] ${s.text.trim()}`).join('\n');
-  const prompt=`회의 음성 타임스탬프 세그먼트를 분석해 화자를 구분하세요.
-발언 패턴·어투·맥락·호칭을 분석하고, 이름 언급 시 실제 이름, 없으면 "화자 A","화자 B" 형식 사용.
+  // 세그먼트 최대 100개, 전사 전체도 함께 제공해 맥락 강화
+  const segText=segments.slice(0,100).map(s=>`[${s.start.toFixed(1)}s] ${s.text.trim()}`).join('\n');
+  const prompt=`아래 회의 전사와 타임스탬프 세그먼트를 분석해 화자를 구분하세요.
 
-세그먼트:
+규칙:
+- 어투·호칭·역할(보고자/질문자/사회자 등)·발언 길이 등으로 화자 구분
+- 이름이 언급되면 실제 이름 사용, 없으면 "보고자", "질문자", "참석자A" 등 역할 기반 명칭
+- 각 화자의 대표 발언 3개 이상 추출
+- 화자가 명확히 2명 이상이면 반드시 구분할 것
+
+전사 요약 (맥락용):
+${transcript.slice(0,600)}
+
+타임스탬프 세그먼트:
 ${segText}
 
-JSON만 응답:
-{"speakers":[{"name":"이름","lines":["발언1","발언2"]}]}
-화자 1명이거나 구분 불가 시 speakers 빈 배열.`;
+JSON만 응답 (화자 구분 불가 시 빈 배열):
+{"speakers":[{"name":"화자명","lines":["대표발언1","대표발언2","대표발언3"]}]}`;
   try{
-    const txt=await groqChat([{role:'user',content:prompt}]);
+    const txt=await groqChat([{role:'user',content:prompt},],2500);
     const p=JSON.parse(txt.replace(/```json|```/g,'').trim());
     return p.speakers||[];
   }catch{return[];}
 }
 
 // ═══════════════════════════════════════════
-//   ANALYZE (Claude) — 화자 이름 적극 활용
+//   ANALYZE — 상세 분석 (파일 날짜 힌트 지원)
 // ═══════════════════════════════════════════
-async function analyze(transcript,speakers,location){
+async function analyze(transcript,speakers,location,fileDateHint){
   const now=new Date();
-  const dateStr=now.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'});
+  // 업로드 파일이면 파일 수정일 사용, 실시간 녹음이면 현재 시각
+  const hintDate=fileDateHint?new Date(fileDateHint):null;
+  const dateHintStr=hintDate
+    ?hintDate.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short'})
+    :now.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'});
+  const isFileUpload=!!fileDateHint;
   const speakerNames=(speakers||[]).map(s=>s.name).join(', ');
-  const speakerCtx=speakers?.length?'\n화자별 주요 발언:\n'+speakers.map(s=>`${s.name}: ${(s.lines||[]).slice(0,2).join(' / ')}`).join('\n'):'';
-  const prompt=`회의 전사 내용을 분석하여 JSON으로만 응답하세요.
+  const speakerCtx=speakers?.length
+    ?'\n\n[화자별 발언 샘플]\n'+speakers.map(s=>`▶ ${s.name}:\n`+(s.lines||[]).slice(0,3).map(l=>`  "${l}"`).join('\n')).join('\n')
+    :'';
+  const prompt=`아래 회의 전사를 꼼꼼히 분석해 JSON으로만 응답하세요.
 
-현재 일시: ${dateStr}
-현재 장소: ${location||'미기재'}
-감지된 화자: ${speakerNames||'미감지'}${speakerCtx}
+[날짜 힌트] ${dateHintStr}${isFileUpload?' (파일 날짜 — 전사 내용에 날짜가 언급되면 그것 우선 사용)':' (녹음 시각)'}
+[장소 힌트] ${location||'미기재 — 전사에서 추출하거나 미기재'}
+[감지된 화자] ${speakerNames||'전사에서 파악'}${speakerCtx}
 
-전사:
+[전사 전문]
 ${transcript}
 
-{"title":"회의 제목","date":"일시","location":"장소","attendees":"참석자(화자 이름 활용)","issues":[{"title":"쟁점","content":"내용"}],"decisions":["결정사항"],"actions":[{"task":"할일","owner":"담당자(화자이름활용)","due":"기한"}],"summary":"요약 3~5문장","suggestions":[{"tag":"효율화","content":"제안"},{"tag":"후속조치","content":"제안"},{"tag":"리스크","content":"주의사항"},{"tag":"다음회의","content":"추천안건"}]}`;
-  const txt=await groqChat([{role:'user',content:prompt}],2000);
+[작성 규칙]
+- title: 전사 내용을 보고 실제 회의/보고 주제를 정확히 반영
+- date: 전사에 날짜 언급이 있으면 그것 사용, 없으면 힌트 날짜
+- location: 전사에 장소 언급이 있으면 그것 사용, 없으면 힌트 장소, 없으면 "미기재"
+- attendees: 전사에 등장하는 모든 화자/직책/이름 포함
+- issues: 실제 논의된 안건별로 구체적 수치·사실을 포함해 최소 3개 이상 작성
+- decisions: 실제 결정·지시·합의된 내용만 (모호한 표현 제외), 최소 2개
+- actions: 전사에서 확인되는 구체적 후속 조치, 담당자와 기한 최대한 추출
+- summary: 전사 핵심 내용 4~6문장, 구체적 수치·결과 반드시 포함
+
+{"title":"","date":"","location":"","attendees":"","issues":[{"title":"","content":""}],"decisions":[""],"actions":[{"task":"","owner":"","due":""}],"summary":"","suggestions":[{"tag":"효율화","content":""},{"tag":"후속조치","content":""},{"tag":"리스크","content":""},{"tag":"다음회의","content":""}]}`;
+  const txt=await groqChat([{role:'user',content:prompt}],4000);
   return JSON.parse(txt.replace(/```json|```/g,'').trim());
 }
 
@@ -1895,12 +1920,14 @@ async function generate(){
   if(!getGroqKey()){toast('⚙️ 설정에서 Groq API 키를 먼저 입력해주세요');openSettings();return;}
   const location=document.getElementById('locationInput').value.trim();
   if(!isOnline){const r=new FileReader();r.onload=ev=>{addToQueue(ev.target.result,{location});toast('📴 오프라인 — 온라인 복귀 시 자동 처리');setStatus('queued','대기 중');renderQueueBadge();updateOnlineStatus();};r.readAsDataURL(src);return;}
+  // 업로드 파일이면 파일 날짜를 힌트로, 실시간 녹음이면 null (현재 시각 사용)
+  const fileDateHint=uploadedFile?uploadedFile.lastModified:null;
   setLoading(true);setStatus('','AI 처리 중…');
   try{
     const{transcript,speakers}=await transcribeWithSpeakers(src);
     const prev=document.getElementById('transcriptPreview');prev.textContent=(transcript||'').slice(0,300)+((transcript?.length||0)>300?'…':'');prev.style.display='block';
     setProgress('회의록 분석 및 작성 중…',70);
-    const parsed=await analyze(transcript,speakers,location);
+    const parsed=await analyze(transcript,speakers,location,fileDateHint);
     generatedData={...parsed,transcript,speakers};setProgress('완료!',100);
     if(parsed.title)document.getElementById('meetingTitle').value=parsed.title;
     if(parsed.date)document.getElementById('meetingDate').value=parsed.date;
