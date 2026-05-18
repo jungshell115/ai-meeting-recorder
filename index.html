@@ -1661,7 +1661,6 @@ ${segText}
 // ═══════════════════════════════════════════
 async function analyze(transcript,speakers,location,fileDateHint){
   const now=new Date();
-  // 업로드 파일이면 파일 수정일 사용, 실시간 녹음이면 현재 시각
   const hintDate=fileDateHint?new Date(fileDateHint):null;
   const dateHintStr=hintDate
     ?hintDate.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short'})
@@ -1671,14 +1670,22 @@ async function analyze(transcript,speakers,location,fileDateHint){
   const speakerCtx=speakers?.length
     ?'\n\n[화자별 발언 샘플]\n'+speakers.map(s=>`▶ ${s.name}:\n`+(s.lines||[]).slice(0,3).map(l=>`  "${l}"`).join('\n')).join('\n')
     :'';
-  const prompt=`아래 회의 전사를 꼼꼼히 분석해 JSON으로만 응답하세요.
+  // 전사 먼저 안전하게 자르기 (8000자 한도 — 프롬프트 전체 토큰 여유 확보)
+  const MAX_CHARS=8000;
+  const tx=transcript.length>MAX_CHARS
+    ?transcript.slice(0,3500)+'\n...(중략)...\n'
+     +transcript.slice(Math.floor(transcript.length/2)-500,Math.floor(transcript.length/2)+500)
+     +'\n...(중략)...\n'+transcript.slice(-2000)
+    :transcript;
+  // 프롬프트를 tx로 직접 빌드 (replace() 미사용 — 특수문자 오동작 방지)
+  const finalPrompt=`아래 회의 전사를 꼼꼼히 분석해 JSON으로만 응답하세요.
 
 [날짜 힌트] ${dateHintStr}${isFileUpload?' (파일 날짜 — 전사 내용에 날짜가 언급되면 그것 우선 사용)':' (녹음 시각)'}
 [장소 힌트] ${location||'미기재 — 전사에서 추출하거나 미기재'}
 [감지된 화자] ${speakerNames||'전사에서 파악'}${speakerCtx}
 
 [전사 전문]
-${transcript}
+${tx}
 
 [작성 규칙]
 - title: 전사 내용을 보고 실제 회의/보고 주제를 정확히 반영
@@ -1691,14 +1698,6 @@ ${transcript}
 - summary: 전사 핵심 내용 4~6문장, 구체적 수치·결과 반드시 포함
 
 {"title":"","date":"","location":"","attendees":"","issues":[{"title":"","content":""}],"decisions":[""],"actions":[{"task":"","owner":"","due":""}],"summary":"","suggestions":[{"tag":"효율화","content":""},{"tag":"후속조치","content":""},{"tag":"리스크","content":""},{"tag":"다음회의","content":""}]}`;
-  // Gemini는 TPM 여유 — 최대 12000자까지 허용 (앞·중간·끝 균등 추출)
-  const MAX_CHARS=12000;
-  const tx=transcript.length>MAX_CHARS
-    ?transcript.slice(0,5000)+'\n...(중략)...\n'
-     +transcript.slice(Math.floor(transcript.length/2)-1000,Math.floor(transcript.length/2)+1000)
-     +'\n...(중략)...\n'+transcript.slice(-3000)
-    :transcript;
-  const finalPrompt=prompt.replace(transcript,tx);
   const txt=await geminiChat(finalPrompt,4000);
   return JSON.parse(txt.replace(/```json|```/g,'').trim());
 }
@@ -2010,14 +2009,17 @@ function fmt(s){return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60)
 // ═══════════════════════════════════════════
 //   GENERATE
 // ═══════════════════════════════════════════
+let _isGenerating=false;
 async function generate(){
+  if(_isGenerating){toast('⏳ 이미 처리 중입니다. 잠시 기다려주세요.');return;}
   const src=audioBlob||uploadedFile;if(!src){toast('녹음하거나 파일을 업로드해주세요');return;}
   if(!getGroqKey()){toast('⚙️ 설정에서 Groq API 키를 먼저 입력해주세요');openSettings();return;}
   if(!getGeminiKey()){toast('⚙️ 설정에서 Google Gemini API 키를 먼저 입력해주세요');openSettings();return;}
   const location=document.getElementById('locationInput').value.trim();
   if(!isOnline){const r=new FileReader();r.onload=ev=>{addToQueue(ev.target.result,{location});toast('📴 오프라인 — 온라인 복귀 시 자동 처리');setStatus('queued','대기 중');renderQueueBadge();updateOnlineStatus();};r.readAsDataURL(src);return;}
-  // 업로드 파일이면 파일 날짜를 힌트로, 실시간 녹음이면 null (현재 시각 사용)
   const fileDateHint=uploadedFile?uploadedFile.lastModified:null;
+  _isGenerating=true;
+  const genBtn=document.getElementById('genBtn');if(genBtn)genBtn.disabled=true;
   setLoading(true);setStatus('','AI 처리 중…');
   try{
     const{transcript,speakers}=await transcribeWithSpeakers(src);
@@ -2030,10 +2032,11 @@ async function generate(){
     if(parsed.attendees)document.getElementById('meetingAttendees').value=parsed.attendees;
     if(parsed.location&&!location)document.getElementById('locationInput').value=parsed.location;
     renderDoc(parsed,speakers);await saveAndSync(parsed);
-    saveCurrentLocation(); // 장소 즐겨찾기 자동 저장
+    saveCurrentLocation();
     switchTab('result');document.querySelectorAll('.tab-item').forEach((t,i)=>t.classList.toggle('active',i===1));
     showDesktopActions(true);setTimeout(()=>{setLoading(false);setStatus('done','완료');},500);toast('✓ 회의록 생성 완료');
   }catch(e){console.error(e);toast('오류: '+e.message);setLoading(false);setStatus('','대기 중');}
+  finally{_isGenerating=false;if(genBtn)genBtn.disabled=false;}
 }
 function toBase64(blob){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(new Error('읽기 실패'));r.readAsDataURL(blob);});}
 
